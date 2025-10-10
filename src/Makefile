@@ -34,10 +34,10 @@ ifeq ($(MPI),1)
 	CC=h5pcc
 endif
 
-ifneq ($(CC),h5cc)
-	ifneq ($(CC),h5pcc)
-		CFLAGS+=-lhdf5 -lhdf5_hl
-	endif
+ifeq ($(CC), $(filter $(CC), h5cc h5pcc))
+	LFLAGS+=-lhdf5_hl
+else
+	CFLAGS+=-lhdf5 -lhdf5_hl
 endif
 
 ifeq ($(GPU),1)
@@ -75,9 +75,6 @@ else
 	CFLAGS+=-O2
 endif
 
-ifeq ($(CC), $(filter $(CC), h5cc h5pcc))
-	CFLAGS += -shlib
-endif
 
 UNAME_S := $(shell uname -s)
 
@@ -202,10 +199,10 @@ libascot.so: libascot.o ascot5_main.o libascot_mem.o afsi.o bbnbi5.o $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LFLAGS)
 
 ascot5_main: ascot5_main.o $(OBJS)
-	$(CC) -o $@ $^ $(CFLAGS)
+	$(CC) -o $@ $^ $(CFLAGS) $(LFLAGS)
 
 bbnbi5: bbnbi5_main.o $(OBJS)
-	$(CC) -o $@ $^ $(CFLAGS)
+	$(CC) -o $@ $^ $(CFLAGS) $(LFLAGS)
 
 doc:
 	doxygen Doxyfile
