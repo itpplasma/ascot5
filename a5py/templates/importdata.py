@@ -5,6 +5,7 @@ import unyt
 import copy
 
 from scipy.interpolate import RegularGridInterpolator,griddata,NearestNDInterpolator
+from matplotlib.path import Path
 
 from a5py.physlib import cocos as cocosmod
 from a5py.physlib import species as physlibspecies
@@ -1059,11 +1060,20 @@ class ImportData():
         bsupvmnc = np.array(data.variables["bsupvmnc"])  #cos(mn) comp B^v,half mesh
 
         # poloidal angle array
-        theta = np.linspace(0, 2.0 * np.pi, ntheta)  # rad
+        theta = np.linspace(0, 2.0 * np.pi, ntheta, endpoint=False)  # rad
 
-        # toroidal angle array
-        # note phi should start at 0 and end on 360, inclusive
-        phi = np.deg2rad(np.linspace(phimin, phimax, nphi, endpoint=True))  # rad
+        # Toroidal angle array.
+        #
+        # ASCOT's spline inputs assume a periodic grid in phi without a
+        # duplicated endpoint. Use endpoint=False and store phimax as the
+        # period endpoint (phimin + nphi*dphi), not the last grid point.
+        phi = np.deg2rad(np.linspace(phimin, phimax, nphi, endpoint=False))  # rad
+        if phi.size >= 2:
+            dphi = float(phi[1] - phi[0])
+            phi_end = float(phi[-1] + dphi)
+        else:
+            dphi = 0.0
+            phi_end = float(phi[-1])
    
         # derivatives
         rumns = rmnc * (-1 * xm)  # drmn*cos(m*u-n*v)/du = -m*rmn*sin(m*u-n*v)
@@ -1142,16 +1152,113 @@ class ImportData():
         bphi = np.zeros([nr, nz, nphi])
         bz = np.zeros([nr, nz, nphi])
 
+        def _points_in_polygon(x, y, poly_x, poly_y):
+            """Even-odd rule point-in-polygon test (vectorized over x,y).
+
+            Parameters
+            ----------
+            x, y : ndarray
+                Point coordinates, same shape.
+            poly_x, poly_y : 1D ndarray
+                Polygon vertices (not necessarily closed).
+            """
+            x = np.asarray(x)
+            y = np.asarray(y)
+            poly_x = np.asarray(poly_x, dtype=float).ravel()
+            poly_y = np.asarray(poly_y, dtype=float).ravel()
+            if poly_x.size < 3:
+                return np.zeros_like(x, dtype=bool)
+            if poly_x[0] != poly_x[-1] or poly_y[0] != poly_y[-1]:
+                poly_x = np.concatenate([poly_x, poly_x[:1]])
+                poly_y = np.concatenate([poly_y, poly_y[:1]])
+
+            inside = np.zeros_like(x, dtype=bool)
+            x0 = poly_x[:-1]
+            y0 = poly_y[:-1]
+            x1 = poly_x[1:]
+            y1 = poly_y[1:]
+            for xa, ya, xb, yb in zip(x0, y0, x1, y1):
+                cond = (ya > y) != (yb > y)
+                den = (yb - ya)
+                # Avoid warnings for horizontal edges (cond is false there)
+                den = np.where(den == 0.0, np.nan, den)
+                x_int = (xb - xa) * (y - ya) / den + xa
+                inside ^= cond & (x < x_int)
+            return inside
+
+        pts = np.column_stack((r_2d.ravel(), z_2d.ravel()))
+
+        def _poly_by_geometric_angle(r_curve, z_curve, r0, z0):
+            """Order a closed curve by geometric angle around (r0,z0)."""
+            r_curve = np.asarray(r_curve, dtype=float).ravel()
+            z_curve = np.asarray(z_curve, dtype=float).ravel()
+            ang = np.arctan2(z_curve - z0, r_curve - r0)
+            idx = np.argsort(ang, kind="mergesort")
+            return np.column_stack((r_curve[idx], z_curve[idx]))
+
+        def _psi_from_nested_surfaces(i_phi):
+            """Compute psi(R,Z) by inverting nested flux surfaces (robust).
+
+            VMEC provides nested flux surfaces R(s,theta,phi), Z(s,theta,phi).
+            For a fixed phi plane, we can invert these nested curves to obtain
+            a normalized flux label s(R,Z) via monotonic point-in-polygon tests.
+
+            This avoids Delaunay interpolation artifacts (holes / clamping) and
+            ensures psi_norm tracks VMEC's s inside the LCFS.
+            """
+            # LCFS polygon for inside/outside classification.
+            lcfs_poly = _poly_by_geometric_angle(
+                lcfs_r[:, i_phi], lcfs_z[:, i_phi], axis_r[i_phi], axis_z[i_phi]
+            )
+            lcfs_path = Path(lcfs_poly, closed=True)
+            inside_lcfs = lcfs_path.contains_points(pts, radius=1e-12)
+
+            # Initialize output with vacuum value.
+            s_out = np.ones(pts.shape[0], dtype=float)
+            if not np.any(inside_lcfs):
+                return (psi0 + (psi1 - psi0) * s_out).reshape(r_2d.shape)
+
+            # Binary search for smallest surface index whose polygon contains
+            # the point (monotonic in nested surfaces).
+            lo = np.zeros(pts.shape[0], dtype=np.int32)
+            hi = np.full(pts.shape[0], ns - 1, dtype=np.int32)
+
+            # Points outside LCFS stay at s=1.
+            active = inside_lcfs.copy()
+            lo[~active] = ns - 1
+            hi[~active] = ns - 1
+
+            niter = int(np.ceil(np.log2(max(2, ns))))
+            for _ in range(niter):
+                mid = (lo + hi) // 2
+                mid_vals = np.unique(mid[active])
+                inside_mid = np.zeros(pts.shape[0], dtype=bool)
+                for k in mid_vals:
+                    if k <= 0:
+                        inside_mid[active & (mid == k)] = True
+                        continue
+                    poly = _poly_by_geometric_angle(
+                        r_grid[k, :, i_phi], z_grid[k, :, i_phi],
+                        axis_r[i_phi], axis_z[i_phi]
+                    )
+                    path = Path(poly, closed=True)
+                    sel = active & (mid == k)
+                    inside_mid[sel] = path.contains_points(pts[sel], radius=1e-12)
+
+                go_hi = active & inside_mid
+                go_lo = active & (~inside_mid)
+                hi[go_hi] = mid[go_hi]
+                lo[go_lo] = mid[go_lo] + 1
+
+            k = np.clip(lo, 0, ns - 1).astype(float)
+            s_out = k / float(max(1, ns - 1))
+            return (psi0 + (psi1 - psi0) * s_out).reshape(r_2d.shape)
+
         # interpolate to cylindrical grid, iterate through toroidal angle
         for i in range(nphi):
             # interpolate data inside VMEC domain
             print(i)
-            psi[:, :, i] = griddata(
-                (r_grid[:, :, i].flatten(), z_grid[:, :, i].flatten()),
-                psi_2d.flatten(),
-                (r_2d, z_2d),
-                fill_value=psi1,
-            )
+            psi[:, :, i] = _psi_from_nested_surfaces(i)
             br[:, :, i] = griddata(
                 (r_grid[:, :, i].flatten(), z_grid[:, :, i].flatten()),
                 br_grid[:, :, i].flatten(),
@@ -1212,7 +1319,7 @@ class ImportData():
 
         out = {
             "axis_phimin": phimin,  # deg
-            "axis_phimax": np.rad2deg(phi[-1]),  # deg
+            "axis_phimax": np.rad2deg(phi_end),  # deg
             "axis_nphi": nphi,
             "axisr": axis_r,  # m
             "axisz": axis_z,  # m
@@ -1225,7 +1332,7 @@ class ImportData():
             "b_zmax": zmax,  # m
             "b_nz": nz,
             "b_phimin": phimin,  # deg
-            "b_phimax": np.rad2deg(phi[-1]),  # deg
+            "b_phimax": np.rad2deg(phi_end),  # deg
             "b_nphi": nphi,
             "br": br,  # T
             "bphi": bphi,  # T
@@ -1240,7 +1347,7 @@ class ImportData():
             "psi_zmax": zmax,  # m
             "psi_nz": nz,
             "psi_phimin": phimin,  # deg
-            "psi_phimax": np.rad2deg(phi[-1]),  # deg
+            "psi_phimax": np.rad2deg(phi_end),  # deg
             "psi_nphi": nphi,
         }
 
