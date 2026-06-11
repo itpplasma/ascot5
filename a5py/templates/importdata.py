@@ -932,6 +932,7 @@ class ImportData():
 
         return ("prt", prt)
 
+    @staticmethod
     def costransform(theta, phi, rmnc, xm, xn):
         """Cosine transform for VMEC coefficients
 
@@ -951,6 +952,7 @@ class ImportData():
                         + np.matmul(rmnc[i,:]*np.sin(xmt), np.sin(xnz).T))
         return f
 
+    @staticmethod
     def sintransform(theta, phi, rmnc, xm, xn):
         """Sine transform for VMEC coefficients
 
@@ -971,7 +973,6 @@ class ImportData():
                         - np.matmul(rmnc[i,:]*np.cos(xmt), np.sin(xnz).T))
         return f
 
-    @staticmethod
     def vmec_field(self,ncfile,phimin=0,phimax=361,nphi=361,ntheta=120,
                    nr=100,nz=100,psipad=0.0):
         """Load magnetic field data from a VMEC equilibrium.
@@ -1231,7 +1232,11 @@ class ImportData():
             "psi_nphi": nphi,
         }
 
-        return out
+        # Keep only keys B_STS.write_hdf5 accepts; the LCFS curves are
+        # auxiliary output not part of the B_STS dataset.
+        out.pop("rlcfs", None)
+        out.pop("zlcfs", None)
+        return ("B_STS", out)
 
     @staticmethod
     def desc_field(h5file,phimin=0,phimax=361,nphi=361,ntheta=120,
