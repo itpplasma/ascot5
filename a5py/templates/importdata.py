@@ -1282,7 +1282,8 @@ class ImportData():
         linearly in s from the last radial interval, as BEAMS3D and LIBSTELL
         do without a vacuum field. This gives a smooth field and rho > 1
         there, but it is not a vacuum solution. Where the extended surfaces
-        cannot be inverted (s > 2.25), the nearest computed field is used.
+        cannot be inverted, or exceed s = 2.25, the nearest computed field
+        is used.
 
         Parameters
         ----------
