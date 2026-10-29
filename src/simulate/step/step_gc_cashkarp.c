@@ -219,15 +219,19 @@ void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
                         err = fmax( err, yerr/ytol );
                     }
                     else if(j==2) {
-                        real rk1[3] = {k1[0]*h[i], k1[1]*h[i], k1[2]*h[i]};
+                        real dr = h[i]*k1[0];
+                        real dphi = h[i]*k1[1];
+                        real dz = h[i]*k1[2];
+                        /* Use displacement and avoid cancellation at small errors. */
                         real yerr =
-                              rk5[0] * rk5[0] + rk4[0] * rk4[0]
-                            - 2 * rk5[0] * rk4[0] * cos(rk5[1] - rk4[1])
-                              + ( rk5[2] - rk4[2] ) * ( rk5[2] - rk4[2] );
+                              pow(rk5[0] - rk4[0], 2)
+                            + 4 * rk5[0] * rk4[0]
+                                * pow(sin((rk5[1] - rk4[1])/2), 2)
+                            + pow(rk5[2] - rk4[2], 2);
                         real ytol =
-                              yprev[0] * yprev[0] + rk1[0] * rk1[0]
-                            - 2 * yprev[0] * rk1[0] * cos(yprev[1] - rk1[1])
-                            + ( yprev[2] - rk1[2] ) * ( yprev[2] - rk1[2] )
+                              dr*dr + dz*dz
+                            + 4 * yprev[0] * (yprev[0] + dr)
+                                * pow(sin(dphi/2), 2)
                             + DBL_EPSILON;
                         err = fmax( err, sqrt(yerr/ytol) );
                     }
