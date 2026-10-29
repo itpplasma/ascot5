@@ -305,6 +305,20 @@ class TestAscot5IO(unittest.TestCase):
                 msg="Failed to raise exception when endcond unknown"):
             State.endcond_check(0x2 | 0x4, "vanished")
 
+    def test_endcond_aborted(self):
+        """Test aborted markers keep the ABORTED flag when the state is read
+        """
+        raw = {"ids": unyt.unyt_array([1, 2, 3, 4], "1"),
+               "endcond": unyt.unyt_array([0x20, 0x0, 0x1, 0x4], "1"),
+               "errormsg": unyt.unyt_array([0, 3, 3, 0], "1")}
+        endcond = State._getactual("gc", lambda q: raw.get(q), None,
+                                   "endcond")[0]
+        self.assertEqual(State.endcond_tostring(endcond[0]), "RHOMAX")
+        self.assertEqual(State.endcond_tostring(endcond[1]), "ABORTED")
+        self.assertEqual(State.endcond_tostring(endcond[2]),
+                         "ABORTED and TLIM")
+        self.assertEqual(State.endcond_tostring(endcond[3]), "THERMAL")
+
     def test_inputs(self):
         inputs = {
             "bfield"  : ["B_TC", "B_GS", "B_2DS", "B_3DS", "B_STS",],
