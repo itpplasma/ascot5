@@ -826,10 +826,12 @@ class Dist(DataContainer):
         pnorm = np.sqrt(ppa.ravel()**2 + ppe.ravel()**2)
         vnorm = physlib.velocity_momentum(mass, pnorm)
         for i, qa in enumerate(dist.abscissa("charge")):
-            k = ascot.input_eval_collcoefs(
+            k, dpara = ascot.input_eval_collcoefs(
                 mass, qa, moment.rc.ravel(), moment.phic.ravel(),
                 moment.zc.ravel(), np.zeros(moment.rc.ravel().shape)*unyt.s,
-                vnorm, "k", grid=True)
+                vnorm, "k", "dpara", grid=True)
+            # The energy moment includes the quadratic speed increment.
+            k = k + dpara / vnorm
             k = -np.sum(k, axis=0) # Minus because k is from plasma to particle
             k = k.ravel().reshape(dist._distribution[:,:,:,:,:,0,i].shape)
             dist._distribution[:,:,:,:,:,0,i] *= k.v
@@ -862,10 +864,12 @@ class Dist(DataContainer):
         pnorm = np.sqrt(ppa.ravel()**2 + ppe.ravel()**2)
         vnorm = physlib.velocity_momentum(mass, pnorm)
         for i, qa in enumerate(dist.abscissa("charge")):
-            k = ascot.input_eval_collcoefs(
+            k, dpara = ascot.input_eval_collcoefs(
                 mass, qa, moment.rc.ravel(), moment.phic.ravel(),
                 moment.zc.ravel(), np.zeros(moment.rc.ravel().shape)*unyt.s,
-                vnorm, "k", grid=True)
+                vnorm, "k", "dpara", grid=True)
+            # The energy moment includes the quadratic speed increment.
+            k = k + dpara / vnorm
             k = -k[0,:,:] # Minus because k is from plasma to particle
             k = k.ravel().reshape(dist._distribution[:,:,:,:,:,0,i].shape)
             dist._distribution[:,:,:,:,:,0,i] *= k.v
@@ -894,10 +898,12 @@ class Dist(DataContainer):
         pnorm = np.sqrt(ppa.ravel()**2 + ppe.ravel()**2)
         vnorm = physlib.velocity_momentum(mass, pnorm)
         for i, qa in enumerate(dist.abscissa("charge")):
-            k = ascot.input_eval_collcoefs(
+            k, dpara = ascot.input_eval_collcoefs(
                 mass, qa, moment.rc.ravel(), moment.phic.ravel(),
                 moment.zc.ravel(), np.zeros(moment.rc.ravel().shape)*unyt.s,
-                vnorm, "k", grid=True)
+                vnorm, "k", "dpara", grid=True)
+            # The energy moment includes the quadratic speed increment.
+            k = k + dpara / vnorm
             k = -np.sum(k[1:], axis=0) # Minus because k is from plasma to prt
             k = k.ravel().reshape(dist._distribution[:,:,:,:,:,0,i].shape)
             dist._distribution[:,:,:,:,:,0,i] *= k.v
