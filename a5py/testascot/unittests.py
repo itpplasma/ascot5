@@ -536,6 +536,49 @@ class TestAscot(unittest.TestCase):
         super(TestAscot, cls).tearDownClass()
         subprocess.run(["rm", "-f", "unittest.h5"])
 
+    def test_gc_conservation(self):
+        """Adaptive GC tolerance must control drift over a long static orbit."""
+        from a5py.ascot5io.options import Opt
+
+        a5 = Ascot("unittest.h5")
+        a5.data.active.efield.activate()
+        opt = Opt.get_default()
+        opt.update({"SIM_MODE": 2, "ENABLE_ORBIT_FOLLOWING": 1,
+                    "ENABLE_ADAPTIVE": 1, "ADAPTIVE_TOL_ORBIT": 1e-10,
+                    "ADAPTIVE_MAX_DRHO": 0.1, "ADAPTIVE_MAX_DPHI": 2,
+                    "FIXEDSTEP_USE_USERDEFINED": 1,
+                    "FIXEDSTEP_USERDEFINED": 1e-8,
+                    "ENDCOND_SIMTIMELIM": 1, "ENDCOND_LIM_SIMTIME": 0.34,
+                    "ENDCOND_MAX_MILEAGE": 0.34, "ENABLE_ORBITWRITE": 1,
+                    "ORBITWRITE_MODE": 1, "ORBITWRITE_INTERVAL": 3.4e-5,
+                    "ORBITWRITE_NPOINT": 10010})
+        mrk = Marker.generate("gc", n=2, species="proton")
+        mrk["r"][:] = 7.6
+        mrk["phi"][:] = 90
+        mrk["energy"][:] = 55000
+        mrk["pitch"] = np.array([0.4, 0.9])
+        try:
+            a5.simulation_initinputs()
+            a5.simulation_initoptions(**opt)
+            a5.simulation_initmarkers(**mrk)
+            run = a5.simulation_run(printsummary=False)
+            for mid in [1, 2]:
+                with self.subTest(marker=mid):
+                    endcond = run.getstate("endcond", state="end", ids=mid)
+                    self.assertTrue(State.endcond_check(
+                        int(endcond[0]), "TLIM NOT ABORTED"))
+                    time, energy, momentum = run.getorbit(
+                        "mileage", "ekin", "ptor", ids=mid)
+                    energy0, momentum0 = run.getstate(
+                        "ekin", "ptor", state="ini", ids=mid)
+                    self.assertGreater(time.max().to("s").v, 0.339)
+                    for value, initial in [(energy, energy0),
+                                           (momentum, momentum0)]:
+                        self.assertTrue(np.isfinite(value).all())
+                        self.assertLess(np.max(np.abs(value/initial - 1)), 1e-6)
+        finally:
+            a5.simulation_free()
+
     def test_initandsim(self):
         """Test :class:`Ascotpy` initialization and simulation routines.
         """
