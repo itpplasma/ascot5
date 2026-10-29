@@ -10,7 +10,7 @@ Main differences to upstream ``main``:
 
 * a5py ``State``: aborted markers keep the ``ABORTED`` end condition instead of being read as ``NONE``.
 * a5py VMEC, DESC and EXTENDER templates: ``psipad`` moves the axis flux away from the edge flux whatever its sign, so rho stays defined near the axis.
-* a5py ``vmec_field``/``vmec_sts``: B and psi are evaluated from the VMEC Fourier series at each grid point, and extended linearly in s outside the LCFS, instead of being interpolated from scattered surface points with a nearest-value fill.
+* a5py ``vmec_field``/``vmec_sts``: the magnetic field is evaluated from VMEC Fourier series on the cylindrical grid. Outside the last closed flux surface, the coefficients and toroidal flux are extended linearly in normalized toroidal flux, rather than using a nearest-value fill.
 
 ASCOT5
 ======
