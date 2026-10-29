@@ -5,6 +5,7 @@ import unyt
 import copy
 
 from scipy.interpolate import RegularGridInterpolator,griddata,NearestNDInterpolator
+from scipy.spatial import cKDTree
 
 import a5py.physlib as physlib
 from a5py.physlib import cocos as cocosmod
@@ -1252,7 +1253,7 @@ class ImportData():
         return f
     @staticmethod
     def vmec_field(ncfile,phimin=0,phimax=360,nphi=360,ntheta=120,
-                   nr=100,nz=100,psipad=0.0, psifill_factor = 1.0, extrapolate=True):
+                   nr=100,nz=100,psipad=0.0, psifill_factor=None, extrapolate=True):
         """Load magnetic field data from a VMEC equilibrium.
 
         Notes
@@ -1266,9 +1267,10 @@ class ImportData():
            `s_full = np.linspace(0, 1, ns) # full mesh`
            `s_half = np.insert(s_full[0:-1] + 0.5 / (ns - 1),0,np.nan) # half mesh`
 
-        The interpolation/extrapolation scheme to convert from the half mesh
-        to the full meshis adapted from Hirshman et al. 1990:
-           https://doi.org/10.1016/0021-9991(90)90259-4.
+        The Fourier series are summed directly at each grid point, whose VMEC
+        coordinates (s,u) are found with Newton's method. Between surfaces
+        the coefficients are linear in s on their own mesh, and odd-m
+        geometry coefficients vanish as sqrt(s) on the axis.
 
         The toroidal magnetic flux is saved in the VMEC output as the variable `phi`
 
@@ -1276,8 +1278,11 @@ class ImportData():
         `rho[0] = sqrt( (psi - Bdata->psi0) / delta );`
         So psi is the toroidal magnetic flux.
 
-        Values outside the LCFS are interpolated to the nearest values. Simulations
-        should not extend past rho>1.
+        Outside the LCFS the coefficients, including the flux, are extended
+        linearly in s from the last radial interval, as BEAMS3D and LIBSTELL
+        do without a vacuum field. This gives a smooth field and rho > 1
+        there, but it is not a vacuum solution. Where the extended surfaces
+        cannot be inverted (s > 2.25), the nearest computed field is used.
 
         Parameters
         ----------
@@ -1290,7 +1295,8 @@ class ImportData():
         nphi : int, optional
            Number of toroidal angle phi grid points. Default = 360.
         ntheta : int, optional
-           Number of poloidal angle theta grid points. Default = 120.
+           Number of poloidal angle theta points on the LCFS, which also sets
+           the starting points of the coordinate search. Default = 120.
         nr : int, optional
            Number of radial coordinate R grid points. Default = 100.
         nz : int, optional
@@ -1299,12 +1305,12 @@ class ImportData():
            Amount (Wb) by which psi0 is moved away from psi1, so that the
            normalized flux stays positive near the axis. Its sign is ignored.
         psifill_factor : float, optional
-            Factor to multiply psi1 (LCFS value) for filling regions outside LCFS.
-            Default = 1.0 (use psi1 directly). Values > 1.0 extend the flux value beyond the LCFS boundary.
+            If given, psi outside the LCFS is set to psifill_factor*psi1
+            instead of being extended. Default = None.
         extrapolate : boolean, optional
-            Whether to extrapolate the magnetic field outside LCFS (nearest
-            extrapolation) or not. Without extrapolation B is set to zero
-            outside LCFS. Default = True.
+            Whether to extend the magnetic field outside the LCFS or not.
+            Without extrapolation B is set to zero outside the LCFS.
+            Default = True.
 
         Returns
         -------
@@ -1333,170 +1339,181 @@ class ImportData():
 
         # read VMEC NetCDF file
         if not nc: raise ImportError("Package netCDF4 not found")
-        data = nc.Dataset(ncfile)
-        xm = np.array(data.variables["xm"])  # poloidal mode numbers
-        xn = np.array(data.variables["xn"])  # toroidal mode numbers
-        xn_nyq = np.array(data.variables["xn_nyq"])  # tor mode numbers (Nyquist)
-        xm_nyq = np.array(data.variables["xm_nyq"])  # pol mode numbers (Nyquist)
-        psi_1d = np.array(data.variables["phi"])  # toroidal flux, full mesh
-        rmnc = np.array(data.variables["rmnc"])  # cos(mn) comp of cyl R, full mesh
-        zmns = np.array(data.variables["zmns"])  # sin(mn) comp of cyl Z, full mesh
-        bsupumnc = np.array(data.variables["bsupumnc"])  #cos(mn) comp B^u,half mesh
-        bsupvmnc = np.array(data.variables["bsupvmnc"])  #cos(mn) comp B^v,half mesh
+        with nc.Dataset(ncfile) as data:
+            var = lambda key: np.array(data.variables[key][:])
+            xm = var("xm")  # poloidal mode numbers
+            xn = var("xn")  # toroidal mode numbers
+            xm_nyq = var("xm_nyq")  # pol mode numbers (Nyquist)
+            xn_nyq = var("xn_nyq")  # tor mode numbers (Nyquist)
+            psi_1d = var("phi")  # toroidal flux, full mesh
+            rmnc = var("rmnc")  # cos(mn) comp of cyl R, full mesh
+            zmns = var("zmns")  # sin(mn) comp of cyl Z, full mesh
+            bsupumnc = var("bsupumnc")  # cos(mn) comp B^u, half mesh
+            bsupvmnc = var("bsupvmnc")  # cos(mn) comp B^v, half mesh
 
-        # poloidal angle array
+        ns = psi_1d.size  # number of flux surfaces
+        hs = 1.0 / (ns - 1)  # radial step in s
+        mpol = np.arange(int(max(xm.max(), xm_nyq.max())) + 1)
+        odd = mpol % 2 == 1
+        rho1 = np.sqrt(hs)  # rho on the first surface off the axis
+        rhomax = 1.5  # extrapolation limit outside the LCFS
+
+        # poloidal and toroidal angle arrays (toroidal endpoint excluded due
+        # to periodicity)
         theta = np.linspace(0, 2.0 * np.pi, ntheta)  # rad
+        phi = np.deg2rad(np.linspace(phimin, phimax, nphi, endpoint=False))
 
-        # toroidal angle array
-        # endpoint neglected to avoid duplicate point at 2pi due to periodicity
-        phi = np.deg2rad(np.linspace(phimin, phimax, nphi, endpoint=False))  # rad
-
-        # derivatives
-        rumns = rmnc * (-1 * xm)  # drmn*cos(m*u-n*v)/du = -m*rmn*sin(m*u-n*v)
-        zumnc = zmns * (xm)  # dzmn*sin(m*u-n*v)/du = m*zmn*cos(m*u-n*v)
-        rvmns = rmnc * (xn)  # drmn*cos(m*u-n*v)/dv = n*rmn*sin(m*u-n*v)
-        zvmnc = zmns * (-1 * xn)  # dzmn*sin(m*u-n*v)/dv = -n*zmn*cos(m*u-n*v)
-
-        # convert from half mesh to full mesh
-        ns = len(psi_1d)  # number of flux surfaces
-        midx_e = np.nonzero(np.mod(xm_nyq, 2) == 0)[0]  # indices of even m modes
-        midx_o = np.nonzero(np.mod(xm_nyq, 2) != 0)[0]  # indices of odd m modes
-        w1 = np.atleast_2d(  # interpolation weights
-            0.5 * np.sqrt((np.arange(ns-2) + 2 - 1)/(np.arange(ns-2) + 2 - 1.5))).T
-        w2 = np.atleast_2d(  # interpolation weights
-            0.5 * np.sqrt((np.arange(ns-2) + 2 - 1)/(np.arange(ns-2) + 2 - 0.5))).T
-        w3 = 2 * np.sqrt((ns - 2) / (ns - 1.5))  # extrapolation weight
-
-        # interpolation on intermediate surfaces
-        bsupumnc[1:-1, midx_e] = 0.5*bsupumnc[1:-1,midx_e] + 0.5*bsupumnc[2:,midx_e]
-        bsupvmnc[1:-1, midx_e] = 0.5*bsupvmnc[1:-1,midx_e] + 0.5*bsupvmnc[2:,midx_e]
-        bsupumnc[1:-1, midx_o] = w1*bsupumnc[1:-1, midx_o] + w2*bsupumnc[2:, midx_o]
-        bsupvmnc[1:-1, midx_o] = w1*bsupvmnc[1:-1, midx_o] + w2*bsupvmnc[2:, midx_o]
-
-        # extrapolation to magnetic axis
-        bsupumnc[0, midx_e] = 2 * bsupumnc[1, midx_e] - bsupumnc[2, midx_e]
-        bsupvmnc[0, midx_e] = 2 * bsupvmnc[1, midx_e] - bsupvmnc[2, midx_e]
-        bsupumnc[0, midx_o] = 0.0
-        bsupvmnc[0, midx_o] = 0.0
-
-        # extrapolation to boundary surface
-        bsupumnc[-1, midx_e] = 2 * bsupumnc[-1, midx_e] - bsupumnc[-2, midx_e]
-        bsupvmnc[-1, midx_e] = 2 * bsupvmnc[-1, midx_e] - bsupvmnc[-2, midx_e]
-        bsupumnc[-1, midx_o] = w3 * bsupumnc[-1, midx_o] - bsupumnc[-2, midx_o]
-        bsupvmnc[-1, midx_o] = w3 * bsupvmnc[-1, midx_o] - bsupvmnc[-2, midx_o]
-
-        # inverse Fourier transform to (s,u,v) coordinates
-        r_grid = ImportData.costransform(theta, phi, rmnc, xm, xn)  # R (m)
-        z_grid = ImportData.sintransform(theta, phi, zmns, xm, xn)  # Z (m)
-        ru_grid = ImportData.sintransform(theta, phi, rumns, xm, xn)  # dR/du (m/rad)
-        zu_grid = ImportData.costransform(theta, phi, zumnc, xm, xn)  # dZ/du (m/rad)
-        rv_grid = ImportData.sintransform(theta, phi, rvmns, xm, xn)  # dR/dv (m/rad)
-        zv_grid = ImportData.costransform(theta, phi, zvmnc, xm, xn)  # dZ/dv (m/rad)
-        bu_grid = ImportData.costransform(theta, phi, bsupumnc, xm_nyq, xn_nyq)  # B^u (T)
-        bv_grid = ImportData.costransform(theta, phi, bsupvmnc, xm_nyq, xn_nyq)  # B^v (T)
-
-        # magnetic axis
-        axis_r = r_grid[0, 0, :]  # m
-        axis_z = z_grid[0, 0, :]  # m
-
-        #get lcfs
-        lcfs_r = r_grid[-1, :, :] # m
-        lcfs_z = z_grid[-1, :, :] # m
-
-        # calculate B_R, B_phi, B_z
-        br_grid = bu_grid * ru_grid + bv_grid * rv_grid
-        bphi_grid = bv_grid * r_grid
-        bz_grid = bu_grid * zu_grid + bv_grid * zv_grid
+        # magnetic axis and LCFS
+        r_edge = ImportData.costransform(theta, phi, rmnc[[0, -1]], xm, xn)
+        z_edge = ImportData.sintransform(theta, phi, zmns[[0, -1]], xm, xn)
+        axis_r, axis_z = r_edge[0, 0, :], z_edge[0, 0, :]  # m
+        lcfs_r, lcfs_z = r_edge[-1], z_edge[-1]  # m
 
         # range in R and Z, make interpolation arrays
-        rmin = np.amin(r_grid)
-        rmax = np.amax(r_grid)
-        zmin = np.amin(z_grid)
-        zmax = np.amax(z_grid)
-        r_1d = np.linspace(rmin, rmax, nr)  # m
-        z_1d = np.linspace(zmin, zmax, nz)  # m
-        z_2d, r_2d = np.meshgrid(z_1d, r_1d)
+        rmin, rmax = np.amin(lcfs_r), np.amax(lcfs_r)
+        zmin, zmax = np.amin(lcfs_z), np.amax(lcfs_z)
+        r_2d, z_2d = np.meshgrid(np.linspace(rmin, rmax, nr),
+                                 np.linspace(zmin, zmax, nz), indexing="ij")
+        points = np.column_stack((r_2d.ravel(), z_2d.ravel()))
+        tol = 1e-10 * (rmax - rmin)  # m
+
+        def collapse(coef, m, n, v, cosine):
+            """Coefficients of cos(mu) and sin(mu) of sum coef*cos(mu - nv)
+            (or sin when cosine is False) on the plane v, per surface.
+            """
+            onehot = (m[:, None] == mpol[None, :]).astype(float)
+            if cosine:
+                return (coef * np.cos(n*v)) @ onehot, \
+                    (coef * np.sin(n*v)) @ onehot
+            return (-coef * np.sin(n*v)) @ onehot, \
+                (coef * np.cos(n*v)) @ onehot
+
+        def full(c, rho):
+            """Full-mesh coefficients and their rho derivative at rho.
+
+            Linear in s between surfaces and, outside the LCFS, along the last
+            interval. Odd m vanish as rho on the axis.
+            """
+            s = rho**2
+            i = np.clip(np.floor(s / hs).astype(int), 0, ns - 2)
+            w = (s / hs - i)[:, None]
+            val = c[i] * (1 - w) + c[i+1] * w
+            dval = (c[i+1] - c[i]) / hs * 2 * rho[:, None]
+            axis = np.ix_(i == 0, odd)
+            val[axis] = c[1, odd] * rho[i == 0, None] / rho1
+            dval[axis] = np.tile(c[1, odd] / rho1, (np.sum(i == 0), 1))
+            return val, dval
+
+        def half(c, rho):
+            """Half-mesh coefficients at rho, linear in s (also outside).
+            """
+            s = rho**2
+            j = np.clip(np.floor(s / hs + 0.5).astype(int), 1, ns - 2)
+            w = (s / hs + 0.5 - j)[:, None]
+            return c[j] * (1 - w) + c[j+1] * w
+
+        def usum(a, b, u):
+            """Sum a*cos(mu) + b*sin(mu) and its u derivative.
+            """
+            cmu, smu = np.cos(u[:, None] * mpol), np.sin(u[:, None] * mpol)
+            return np.sum(a*cmu + b*smu, axis=1), \
+                np.sum(mpol * (b*cmu - a*smu), axis=1)
+
+        def geometry(c, rho, u):
+            """R or Z, and its derivatives in u and rho, at (rho, u).
+            """
+            (a, da), (b, db) = full(c[0], rho), full(c[1], rho)
+            f, fu = usum(a, b, u)
+            return f, fu, usum(da, db, u)[0]
 
         # toroidal magnetic flux
         psi0 = psi_1d[0]  # axis
         psi1 = psi_1d[-1]  # LCFS
-        fill_psi = psi1*psifill_factor # Here to make sure outside LCFS is larger than psi1 (Default is 1.0, so fill_psi = psi1)
-        if psifill_factor != 1.0:
-            print(f"Psi0={psi0}, Psi1={psi1}, Fill Psi (outside LCFS)={fill_psi}")
-        psi_2d = np.tile(psi_1d, (ntheta, 1)).T  # Wb
 
-        # interpolate psi, B_R, B_phi, B_Z to cylindircal coordinates
+        # evaluate psi, B_R, B_phi, B_Z on the cylindrical grid, iterate
+        # through toroidal angle
         psi = np.zeros([nr, nz, nphi])
         br = np.zeros([nr, nz, nphi])
         bphi = np.zeros([nr, nz, nphi])
         bz = np.zeros([nr, nz, nphi])
+        for k in range(nphi):
+            v = phi[k]
+            rc = collapse(rmnc, xm, xn, v, True)
+            zc = collapse(zmns, xm, xn, v, False)
 
-        # interpolate to cylindrical grid, iterate through toroidal angle
-        for i in range(nphi):
-            # define LCFS boundary at this toroidal angle
-            lcfs_path = Path(np.column_stack((lcfs_r[:, i], lcfs_z[:, i])))
-            
-            # determine which grid points are inside LCFS
-            points = np.column_stack((r_2d.flatten(), z_2d.flatten()))
-            inside = lcfs_path.contains_points(points).reshape(r_2d.shape)
+            # initial (rho, u) from the nearest of a set of sample points,
+            # taken inside the LCFS for points inside it and outside otherwise
+            inside = Path(np.column_stack((lcfs_r[:, k], lcfs_z[:, k]))
+                          ).contains_points(points)
+            rho = np.zeros(points.shape[0])
+            u = np.zeros(points.shape[0])
+            for sel, rhos in [(inside, np.linspace(0, 1, 33)),
+                              (~inside, np.linspace(1, rhomax, 17))]:
+                if not np.any(sel):
+                    continue
+                rs, us = [a.ravel() for a in np.meshgrid(rhos, theta[:-1])]
+                nearest = cKDTree(np.column_stack(
+                    (geometry(rc, rs, us)[0], geometry(zc, rs, us)[0]))
+                    ).query(points[sel])[1]
+                rho[sel], u[sel] = rs[nearest], us[nearest]
 
-            # interpolate psi inside convex hull of VMEC points
-            psi_slice = griddata(
-                (r_grid[:, :, i].flatten(), z_grid[:, :, i].flatten()),
-                psi_2d.flatten(),
-                (r_2d, z_2d),
-                method='cubic')
+            # invert R(rho,u) = R, Z(rho,u) = Z with Newton's method
+            todo = np.arange(points.shape[0])
+            for _ in range(50):
+                r, ru, rrho = geometry(rc, rho[todo], u[todo])
+                z, zu, zrho = geometry(zc, rho[todo], u[todo])
+                dr, dz = points[todo, 0] - r, points[todo, 1] - z
+                left = np.hypot(dr, dz) >= tol
+                todo, dr, dz = todo[left], dr[left], dz[left]
+                if todo.size == 0:
+                    break
+                det = rrho[left] * zu[left] - ru[left] * zrho[left]
+                det[det == 0] = np.finfo(float).tiny
+                drho = (zu[left] * dr - ru[left] * dz) / det
+                du = (rrho[left] * dz - zrho[left] * dr) / det
+                # limit the step so the iteration does not jump surfaces
+                step = np.minimum(1, np.minimum(0.1 / (np.abs(drho) + 1e-300),
+                                                0.5 / (np.abs(du) + 1e-300)))
+                rho[todo] += step * drho
+                u[todo] += step * du
+                u[todo[rho[todo] < 0]] += np.pi
+                rho = np.abs(rho)
+            r, ru, _ = geometry(rc, rho, u)
+            z, zu, _ = geometry(zc, rho, u)
+            found = (np.hypot(points[:, 0] - r, points[:, 1] - z) < 1e3 * tol) \
+                & (rho <= rhomax)
+            if np.any(inside & ~found):
+                warnings.warn(
+                    "VMEC coordinates not found for %d points inside the LCFS"
+                    % np.sum(inside & ~found))
 
-            # fill outside LCFS
-            psi_filled = psi_slice.copy()
-            psi_filled[~inside] = fill_psi 
-            psi[:, :, i] = psi_filled
-            br[:, :, i] = griddata(
-                (r_grid[:, :, i].flatten(), z_grid[:, :, i].flatten()),
-                br_grid[:, :, i].flatten(),
-                (r_2d, z_2d),
-            )
-            bphi[:, :, i] = griddata(
-                (r_grid[:, :, i].flatten(), z_grid[:, :, i].flatten()),
-                bphi_grid[:, :, i].flatten(),
-                (r_2d, z_2d),
-            )
-            bz[:, :, i] = griddata(
-                (r_grid[:, :, i].flatten(), z_grid[:, :, i].flatten()),
-                bz_grid[:, :, i].flatten(),
-                (r_2d, z_2d),
-            )
+            # B = B^u dx/du + B^v dx/dv, cylindrical components
+            rv = geometry(collapse(rmnc*xn, xm, xn, v, False), rho, u)[0]
+            zv = geometry(collapse(-zmns*xn, xm, xn, v, True), rho, u)[0]
+            bu = usum(*[half(c, rho) for c in
+                        collapse(bsupumnc, xm_nyq, xn_nyq, v, True)], u)[0]
+            bv = usum(*[half(c, rho) for c in
+                        collapse(bsupvmnc, xm_nyq, xn_nyq, v, True)], u)[0]
+            b = np.array([bu*ru + bv*rv, bv*r, bu*zu + bv*zv])
 
-            #Replace br, bphi, bz NaN values outside LCFS with closest values (or zeroes if extrapolation = False)
-            data = br[:,:,i]
-            if extrapolate:
-                mask = np.where(~np.isnan(data))
-                interp = NearestNDInterpolator(np.transpose(mask),data[mask])
-                filled_data = interp(*np.indices(data.shape))
-            else:
-                filled_data = data.copy()
-                filled_data[np.where(np.isnan(data))]=0
-            br[:,:,i] = filled_data
+            # flux is linear in s along the last interval outside the LCFS
+            s = np.where(found, rho**2, rhomax**2)
+            i = np.clip(np.floor(s / hs).astype(int), 0, ns - 2)
+            psi[:, :, k] = (psi_1d[i] + (s / hs - i)
+                            * (psi_1d[i+1] - psi_1d[i])).reshape(nr, nz)
+            if psifill_factor is not None:
+                psi[:, :, k][~inside.reshape(nr, nz)] = psi1 * psifill_factor
 
-            data = bz[:,:,i]
-            if extrapolate:
-                mask = np.where(~np.isnan(data))
-                interp = NearestNDInterpolator(np.transpose(mask),data[mask])
-                filled_data = interp(*np.indices(data.shape))
-            else:
-                filled_data = data.copy()
-                filled_data[np.where(np.isnan(data))]=0
-            bz[:,:,i] = filled_data
-
-            data = bphi[:,:,i]
-            if extrapolate:
-                mask = np.where(~np.isnan(data))
-                interp = NearestNDInterpolator(np.transpose(mask),data[mask])
-                filled_data = interp(*np.indices(data.shape))
-            else:
-                filled_data = data.copy()
-                filled_data[np.where(np.isnan(data))]=0
-            bphi[:,:,i] = filled_data
+            # where the extrapolated surfaces cannot be inverted, use the
+            # nearest value (or zero without extrapolation)
+            if extrapolate and np.any(~found):
+                nearest = cKDTree(points[found]).query(points[~found])[1]
+                b[:, ~found] = b[:, found][:, nearest]
+            elif not extrapolate:
+                b[:, s > 1] = 0
+            br[:, :, k] = b[0].reshape(nr, nz)
+            bphi[:, :, k] = b[1].reshape(nr, nz)
+            bz[:, :, k] = b[2].reshape(nr, nz)
 
         # change order from [R,Z,phi] to [R,phi,Z]
         psi = np.transpose(psi, (0, 2, 1))
