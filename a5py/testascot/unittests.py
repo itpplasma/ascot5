@@ -426,6 +426,61 @@ class TestVmecField(unittest.TestCase):
                     self.assertAlmostEqual(
                         bdata["psi0"].ravel()[0], -np.sign(phiedge) * 1e-3)
 
+    def test_field(self):
+        """Test B and rho near and outside the LCFS against the VMEC sums
+        """
+        import netCDF4
+        wout = self.writewout(-2.0)
+        a5 = Ascot(self.testfilename, create=True)
+        a5.data.create_input(
+            "vmec_sts", ncfile=wout, phimin=0, phimax=72, nphi=18,
+            ntheta=120, nr=50, nz=50, activate=True)
+        with netCDF4.Dataset(wout) as f:
+            var = lambda key: np.array(f[key][:])
+            xm, xn, rmnc, zmns = var("xm"), var("xn"), var("rmnc"), var("zmns")
+            bu, bv = var("bsupumnc"), var("bsupvmnc")
+        ns = rmnc.shape[0]
+
+        def radial(c, s, half):
+            """Linear interpolation in s, extended beyond the last surface.
+            """
+            x = s * (ns - 1) + (0.5 if half else 0)
+            i = np.clip(np.floor(x).astype(int), 1 if half else 0, ns - 2)
+            return c[i] * (i + 1 - x)[:, None] + c[i+1] * (x - i)[:, None]
+
+        rng = np.random.default_rng(0)
+        a5.input_init(bfield=True)
+        try:
+            for s in [0.95, 0.99, 1.02]:
+                u = rng.uniform(0, 2*np.pi, 200)
+                v = rng.uniform(0, 2*np.pi, 200)
+                sv = np.full(u.shape, s)
+                cos, sin = np.cos(u[:,None]*xm - v[:,None]*xn), \
+                    np.sin(u[:,None]*xm - v[:,None]*xn)
+                rc, zc = radial(rmnc, sv, False), radial(zmns, sv, False)
+                r, z = np.sum(rc*cos, 1), np.sum(zc*sin, 1)
+                bsupu = np.sum(radial(bu, sv, True)*cos, 1)
+                bsupv = np.sum(radial(bv, sv, True)*cos, 1)
+                b = np.array([
+                    bsupu * np.sum(-xm*rc*sin, 1) + bsupv * np.sum(xn*rc*sin, 1),
+                    bsupv * r,
+                    bsupu * np.sum(xm*zc*cos, 1) - bsupv * np.sum(xn*zc*cos, 1)])
+                out = a5.input_eval(r*unyt.m, v*unyt.rad, z*unyt.m, 0*unyt.s,
+                                    "br", "bphi", "bz", "rho")
+                err = np.linalg.norm(np.array([o.v for o in out[:3]]) - b,
+                                     axis=0) / np.linalg.norm(b, axis=0)
+                # Points beyond the LCFS may lie outside the grid
+                ingrid = np.isfinite(err)
+                with self.subTest(s=s):
+                    self.assertGreater(np.mean(ingrid), 0.5)
+                    self.assertLess(np.max(err[ingrid]), 1e-4,
+                                    "B differs from VMEC")
+                    self.assertLess(
+                        np.max(np.abs(out[3].v[ingrid] - np.sqrt(s))), 1e-3,
+                        "rho differs from sqrt(s)")
+        finally:
+            a5.input_free()
+
     def tearDown(self):
         """Remove the files used in testing.
         """
