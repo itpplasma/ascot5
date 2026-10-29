@@ -340,6 +340,86 @@ class TestAscot5IO(unittest.TestCase):
         subprocess.run(["rm", "-f", self.testfilename],
                        stdout=subprocess.DEVNULL)
 
+class TestVmecField(unittest.TestCase):
+    """Test the VMEC field template on a synthetic rotating ellipse.
+    """
+
+    def setUp(self):
+        self.testfilename = "unittest.h5"
+        self.woutfilename = "unittest_wout{}.nc"
+
+    def writewout(self, phiedge):
+        """Write a five-period rotating ellipse in the VMEC wout format.
+
+        Returns the file name, which differs between the flux signs.
+        """
+        import netCDF4
+        ns, nfp = 41, 5
+        s  = np.linspace(0, 1, ns)
+        sh = np.append(0, (np.arange(1, ns) - 0.5) / (ns - 1))
+        xm = np.array([0, 1, 1, 2])
+        xn = np.array([0, 0, nfp, 0])
+        rmnc = np.column_stack(
+            [10 + 0.05*s, np.sqrt(s), 0.2*np.sqrt(s), 0.05*s])
+        zmns = np.column_stack(
+            [0*s, np.sqrt(s), -0.2*np.sqrt(s), 0.05*s])
+        bsupumnc = np.column_stack(
+            [0.2 + 0.05*sh, 0.02*np.sqrt(sh), 0*sh, 0*sh])
+        bsupvmnc = np.column_stack(
+            [0.5 + 0*sh, -0.05*np.sqrt(sh), 0.01*np.sqrt(sh), 0*sh])
+        bsupumnc[0,:] = 0
+        bsupvmnc[0,:] = 0
+        fn = self.woutfilename.format("p" if phiedge > 0 else "n")
+        with netCDF4.Dataset(fn, "w") as f:
+            f.createDimension("radius", ns)
+            f.createDimension("mn_mode", xm.size)
+            f.createDimension("mn_mode_nyq", xm.size)
+            for name, dims, val in [
+                    ("xm", ("mn_mode",), xm), ("xn", ("mn_mode",), xn),
+                    ("xm_nyq", ("mn_mode_nyq",), xm),
+                    ("xn_nyq", ("mn_mode_nyq",), xn),
+                    ("phi", ("radius",), phiedge * s),
+                    ("rmnc", ("radius", "mn_mode"), rmnc),
+                    ("zmns", ("radius", "mn_mode"), zmns),
+                    ("bsupumnc", ("radius", "mn_mode_nyq"), bsupumnc),
+                    ("bsupvmnc", ("radius", "mn_mode_nyq"), bsupvmnc)]:
+                f.createVariable(name, "f8", dims)[:] = val
+        return fn
+
+    def test_psipad(self):
+        """Test psi0 is padded away from psi1 for either sign of the flux
+        """
+        for phiedge in [2.0, -2.0]:
+            wout = self.writewout(phiedge)
+            for psipad in [1e-3, -1e-3]:
+                with self.subTest(phiedge=phiedge, psipad=psipad):
+                    subprocess.run(["rm", "-f", self.testfilename])
+                    a5 = Ascot(self.testfilename, create=True)
+                    a5.data.create_input(
+                        "vmec_sts", ncfile=wout, phimin=0,
+                        phimax=72, nphi=8, ntheta=60, nr=40, nz=40,
+                        psipad=psipad, activate=True)
+                    bdata = a5.data.bfield.active.read()
+                    a5.input_init(bfield=True)
+                    try:
+                        rho = a5.input_eval(
+                            bdata["axisr"][0]*unyt.m, 0*unyt.rad,
+                            bdata["axisz"][0]*unyt.m, 0*unyt.s, "rho")
+                    finally:
+                        a5.input_free()
+                    self.assertTrue(np.all(np.isfinite(rho)),
+                                    "rho undefined on the magnetic axis")
+                    self.assertAlmostEqual(
+                        bdata["psi0"].ravel()[0], -np.sign(phiedge) * 1e-3)
+
+    def tearDown(self):
+        """Remove the files used in testing.
+        """
+        subprocess.run(["rm", "-f", self.testfilename,
+                        self.woutfilename.format("p"),
+                        self.woutfilename.format("n")],
+                       stdout=subprocess.DEVNULL)
+
 class TestAscot(unittest.TestCase):
     """Class for testing :class:`Ascot` object.
     """
