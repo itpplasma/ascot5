@@ -1296,7 +1296,8 @@ class ImportData():
         nz : int, optional
            Number of vertical coordinate Z grid points. Default = 100.
         psipad : float, optional
-           Padding to slightly alter flux on axis.
+           Amount (Wb) by which psi0 is moved away from psi1, so that the
+           normalized flux stays positive near the axis. Its sign is ignored.
         psifill_factor : float, optional
             Factor to multiply psi1 (LCFS value) for filling regions outside LCFS.
             Default = 1.0 (use psi1 directly). Values > 1.0 extend the flux value beyond the LCFS boundary.
@@ -1506,7 +1507,7 @@ class ImportData():
         #pad psi0 if needed
         if psipad != 0.0:
             print('Warning: Padding psi0 with',psipad)
-            psi0 += psipad
+            psi0 += np.sign(psi0 - psi1) * abs(psipad)
 
         out = {
             "axis_phimin": phimin,  # deg
@@ -1584,7 +1585,8 @@ class ImportData():
         nz : int, optional
            Number of vertical coordinate Z grid points. Default = 100.
         psipad : float, optional
-           Padding to slightly alter flux on axis.
+           Amount (Wb) by which psi0 is moved away from psi1, so that the
+           normalized flux stays positive near the axis. Its sign is ignored.
 
         Returns
         -------
@@ -1711,7 +1713,7 @@ class ImportData():
         #pad psi0 if needed
         if psipad != 0.0:
             print('Warning: Padding psi0 with',psipad)
-            psi0 += psipad
+            psi0 += np.sign(psi0 - psi1) * abs(psipad)
 
         out = {
             "axis_phimin": phimin,  # deg
@@ -1780,7 +1782,8 @@ class ImportData():
         ntheta : int, optional
            Number of poloidal angle theta grid points. Default = 120.
         psipad : float, optional
-           Padding to slightly alter flux on axis.
+           Amount (Wb) by which psi0 is moved away from psi1, so that the
+           normalized flux stays positive near the axis. Its sign is ignored.
 
         Returns
         -------
@@ -1922,7 +1925,7 @@ class ImportData():
         #pad psi0 if needed
         if psipad != 0.0:
             print('Warning: Padding psi0 with',psipad)
-            psi0 += psipad
+            psi0 += np.sign(psi0 - psi1) * abs(psipad)
 
         out = {
             "axis_phimin": 0,  # deg
