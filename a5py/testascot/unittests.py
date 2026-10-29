@@ -870,6 +870,75 @@ class TestAscot(unittest.TestCase):
                                "Converting ppar-pperp to ekin-pitch failed",
                                0.001)
 
+class TestPowerDeposition(unittest.TestCase):
+    """Energy transfer for the exactly solvable Cartesian thermal bath."""
+
+    def test_diffusive_energy_transfer(self):
+        from a5py.ascot5io.dist import Dist, DistData, DistMoment
+        from a5py import physlib
+
+        mass = unyt.mp
+        temperature = 1000 * unyt.eV
+        gamma = np.array([1.0, 2.0, 3.0]) / unyt.s
+
+        class ThermalBath:
+            def input_eval_collcoefs(self, ma, qa, r, phi, z, t, v,
+                                     *coefs, grid=False):
+                diffusion = (gamma * temperature / ma).to("m**2/s**3")
+                d = np.broadcast_to(diffusion.v[:, None, None],
+                                    (3, r.size, v.size)).copy()*diffusion.units
+                k = -gamma[:, None, None]*v + 2*d/v
+                values = {"k": k, "dpara": d}
+                out = [values[c] for c in coefs]
+                return out[0] if len(out) == 1 else out
+
+        edges = dict(r=np.array([5.0, 6.0])*unyt.m,
+                     phi=np.array([0.0, 1.0])*unyt.rad,
+                     z=np.array([0.0, 1.0])*unyt.m,
+                     ppar=np.array([-2.0, 0.0, 2.0])*1e-21*unyt.kg*unyt.m/unyt.s,
+                     pperp=np.array([0.0, 1.0, 2.0, 3.0])*1e-21*unyt.kg*unyt.m/unyt.s,
+                     time=np.array([0.0, 1.0])*unyt.s,
+                     charge=np.array([0.5, 1.5])*unyt.e)
+        for equilibrium in [False, True]:
+            with self.subTest(equilibrium=equilibrium):
+                if equilibrium:
+                    speed = np.sqrt(3*temperature/mass).to("m/s")
+                    momentum = mass*speed/np.sqrt(1-(speed/unyt.c)**2)
+                    edges["ppar"] = np.array([-0.1, 0.1])*momentum
+                    edges["pperp"] = np.array([0.9, 1.1])*momentum
+                shape = tuple(len(e)-1 for e in edges.values())
+                histogram = np.arange(1, np.prod(shape)+1).reshape(shape)*unyt.dimensionless
+                dist = DistData(histogram, **edges)
+                original = dist.histogram().copy()
+                xyz = np.ones((1, 1, 1))
+                moment = DistMoment(
+                    edges["r"], edges["phi"], edges["z"], 5.5*xyz*unyt.m,
+                    0.5*xyz*unyt.rad, 0.5*xyz*unyt.m,
+                    xyz*unyt.m**2, xyz*unyt.m**3, False)
+                ppa, ppe = np.meshgrid(dist.abscissa("ppar"),
+                                       dist.abscissa("pperp"), indexing="ij")
+                v = physlib.velocity_momentum(mass, np.sqrt(ppa**2+ppe**2))
+                occupation = histogram[0, 0, 0, :, :, 0, 0]
+                # The Cartesian bath has d<E>/dt = -2 gamma E + 3 gamma T.
+                expected = np.array([
+                    np.sum(occupation*g*(mass*v**2-3*temperature)).to("W").v
+                    for g in gamma])*unyt.W / (1*unyt.m**3)
+                for method, reference in [
+                        ("powerdep", np.sum(expected)),
+                        ("electronpowerdep", expected[0]),
+                        ("ionpowerdep", np.sum(expected[1:]))]:
+                    with self.subTest(method=method):
+                        getattr(Dist, method)(ThermalBath(), mass, dist, moment)
+                        actual = moment.ordinate(method).to("W/m**3")
+                        scale = np.sum(histogram)*np.sum(gamma)*temperature
+                        self.assertLess(np.max(np.abs(actual-reference)).v,
+                                        1e-10*scale.to("W").v)
+                np.testing.assert_array_equal(dist.histogram(), original)
+                np.testing.assert_allclose(
+                    moment.ordinate("powerdep"),
+                    moment.ordinate("electronpowerdep")
+                    + moment.ordinate("ionpowerdep"), rtol=1e-12, atol=1e-30)
+
 class TestMoments(unittest.TestCase):
     """Class for testing distribution moments.
     """
