@@ -1,3 +1,17 @@
+Experimental ITP fork of ASCOT5
+===============================
+
+This is an experimental fork of ASCOT5, maintained by the Institute of Theoretical and Computational Physics (ITP), TU Graz.
+It carries fixes that are not in `upstream ASCOT5 <https://github.com/ascot4fusion/ascot5>`_ and is not supported by the upstream developers.
+Use it at your own risk; results may differ from upstream releases.
+Report problems with this fork here, not upstream.
+
+Main differences to upstream ``main``:
+
+* a5py ``State``: aborted markers keep the ``ABORTED`` end condition instead of being read as ``NONE``.
+* a5py VMEC, DESC and EXTENDER templates: ``psipad`` moves the axis flux away from the edge flux whatever its sign, so rho stays defined near the axis.
+* a5py ``vmec_field``/``vmec_sts``: B and psi are evaluated from the VMEC Fourier series at each grid point, and extended linearly in s outside the LCFS, instead of being interpolated from scattered surface points with a nearest-value fill.
+
 ASCOT5
 ======
 
