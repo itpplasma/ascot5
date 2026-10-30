@@ -1452,6 +1452,9 @@ class ImportData():
                               (~inside, np.linspace(1, rhomax, 17))]:
                 if not np.any(sel):
                     continue
+                # A seed on the axis has no angular derivative for Newton.
+                if rhos[0] == 0:
+                    rhos[0] = 0.5 * rhos[1]
                 rs, us = [a.ravel() for a in np.meshgrid(rhos, theta[:-1])]
                 nearest = cKDTree(np.column_stack(
                     (geometry(rc, rs, us)[0], geometry(zc, rs, us)[0]))

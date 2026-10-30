@@ -543,6 +543,30 @@ class TestVmecField(unittest.TestCase):
                     self.assertAlmostEqual(
                         bdata["psi0"].ravel()[0], -np.sign(phiedge) * 1e-3)
 
+    def test_near_axis_flux(self):
+        """Near-axis seeds must recover flux through the runtime interpolator.
+        """
+        wout = self.writewout(-2.0)
+        a5 = Ascot(self.testfilename, create=True)
+        a5.data.create_input(
+            "vmec_sts", ncfile=wout, phimin=0, phimax=72, nphi=8,
+            ntheta=120, nr=81, nz=81, psipad=1e-3, activate=True)
+        s, u = np.meshgrid(np.array([1e-5, 1e-4, 4e-4, 1e-3]),
+                           np.linspace(0, 2*np.pi, 32, endpoint=False))
+        s, u = s.ravel(), u.ravel()
+        r = 10 + 0.05*s + 1.2*np.sqrt(s)*np.cos(u) + 0.05*s*np.cos(2*u)
+        z = 0.8*np.sqrt(s)*np.sin(u) + 0.05*s*np.sin(2*u)
+        a5.input_init(bfield=True)
+        try:
+            rho = a5.input_eval(r*unyt.m, 0*unyt.rad, z*unyt.m,
+                                0*unyt.s, "rho").v
+        finally:
+            a5.input_free()
+        expected = (2*s + 1e-3) / (2 + 1e-3)
+        self.assertTrue(np.all(np.isfinite(rho)), "flux undefined near axis")
+        self.assertLess(np.max(np.abs(rho**2 - expected)), 1e-4,
+                        "near-axis points received exterior flux labels")
+
     def test_field(self):
         """Test B and rho near and outside the LCFS against the VMEC sums
         """
