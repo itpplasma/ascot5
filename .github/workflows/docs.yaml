@@ -45,6 +45,8 @@ jobs:
           tar -xf code.tar -C ./build/
 
       - name: Clone figures repository
+        # Forks do not have credentials for the upstream figures repository.
+        if: ${{ github.repository == 'ascot4fusion/ascot5' }}
         uses: actions/checkout@v4
         with:
           repository: ascot4fusion/figures
