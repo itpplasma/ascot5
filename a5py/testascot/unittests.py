@@ -747,6 +747,38 @@ class TestAscot(unittest.TestCase):
             a5.simulation_free()
             original.activate()
 
+    def test_particle_mass_units(self):
+        """Serialized amu masses and explicitly unitful masses give SI momentum."""
+        native = Ascot("unittest.h5")
+        markers = Marker.generate("prt", n=3, species="proton")
+        markers["r"][:] = 7.6
+        markers["phi"][:] = [10, 30, 90]
+        markers["vr"][:] = [1e6, -2e6, 3e6]
+        markers["vphi"][:] = [2e6, 1e6, -1e6]
+        markers["vz"][:] = [-.5e6, .8e6, 1.5e6]
+        velocity = np.column_stack([markers[k].to("m/s").v
+                                    for k in ["vr", "vphi", "vz"]])
+        mass = markers["mass"].to("kg").v
+        gamma = 1/np.sqrt(1 - np.sum(velocity**2, axis=1)/299792458.0**2)
+        expected = mass[:, None]*gamma[:, None]*velocity
+        try:
+            native.input_init(bfield=True)
+            with tempfile.TemporaryDirectory() as directory:
+                saved = Ascot(str(Path(directory)/"particles.h5"), create=True)
+                saved.data.create_input("prt", **markers)
+                loaded = saved.data.marker.active.read()
+                si = dict(markers, mass=markers["mass"].to("kg"))
+                for label, values in [("HDF5", loaded), ("amu", markers), ("kg", si)]:
+                    with self.subTest(mass_units=label):
+                        native.simulation_initmarkers(**values)
+                        actual = np.array([[getattr(native._inistate[i], k)
+                                            for k in ["p_r", "p_phi", "p_z"]]
+                                           for i in range(3)])
+                        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=0)
+                        self.assertTrue(all(native._inistate[i].err == 0 for i in range(3)))
+        finally:
+            native.simulation_free()
+
     def test_gc_conservation(self):
         """Adaptive GC tolerance must control drift over a long static orbit."""
         from a5py.ascot5io.options import Opt
