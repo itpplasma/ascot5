@@ -294,6 +294,9 @@ int prepare_markers(
  */
 int write_rungroup(sim_data* sim, particle_state* ps, int n_tot, char* qid) {
 
+    /* All ranks must close the input before root reopens it for writing. */
+    mpi_interface_barrier();
+
     if(sim->mpi_rank == sim->mpi_root) {
         /* Initialize results group in the output file */
         print_out0(VERBOSE_IO, sim->mpi_rank, sim->mpi_root,
