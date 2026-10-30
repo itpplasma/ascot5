@@ -8,6 +8,10 @@ import unittest
 import datetime
 import subprocess
 import importlib
+import os
+from pathlib import Path
+import shutil
+import tempfile
 import matplotlib.pyplot as plt
 
 import a5py.routines.plotting as a5plt
@@ -353,6 +357,119 @@ class TestAscot5IO(unittest.TestCase):
         """
         subprocess.run(["rm", "-f", self.testfilename],
                        stdout=subprocess.DEVNULL)
+
+@unittest.skipUnless(os.environ.get("ASCOT_MPI_EXECUTABLE"),
+                     "Set ASCOT_MPI_EXECUTABLE to an MPI-enabled ascot5_main")
+class TestMPIOrbit(unittest.TestCase):
+    """Exercise MPI gathering through the executable and the HDF5 readers.
+
+    Run with ASCOT_MPI_EXECUTABLE=/path/to/ascot5_main python unittests.py
+    TestMPIOrbit, inside an allocation with at least four MPI slots.
+    """
+
+    def test_gather(self):
+        """Uneven partitions must preserve every marker's orbit and endstate."""
+        from a5py.ascot5io.options import Opt
+
+        executable = str(Path(os.environ["ASCOT_MPI_EXECUTABLE"]).resolve())
+        env = dict(os.environ, OMP_NUM_THREADS="1")
+        with tempfile.TemporaryDirectory(prefix="ascot-mpi-", dir=".") as directory:
+            directory = Path(directory)
+            source = directory / "input.h5"
+            a5 = Ascot(str(source), create=True)
+            a5.data.create_input("bfield analytical iter circular", splines=False)
+            a5.data.create_input("wall rectangular")
+            a5.data.create_input("plasma flat")
+            for name in ("E_TC", "N0_3D", "Boozer", "MHD_STAT", "asigma_loc"):
+                a5.data.create_input(name)
+            mrk = Marker.generate("gc", n=7, species="alpha")
+            mrk["energy"][:] = 5e4
+            mrk["r"][:] = np.linspace(7.1, 7.7, 7)
+            mrk["phi"][:] = 45
+            mrk["pitch"][:] = np.linspace(-0.9, 0.9, 7)
+            mrk["weight"][:] = np.arange(1, 8)
+            a5.data.create_input("gc", **mrk)
+            opt = Opt.get_default()
+            opt.update({"SIM_MODE": 2, "ENABLE_ADAPTIVE": 0,
+                        "FIXEDSTEP_USE_USERDEFINED": 1,
+                        "FIXEDSTEP_USERDEFINED": 1e-9,
+                        "ENABLE_ORBIT_FOLLOWING": 1, "ENDCOND_SIMTIMELIM": 1,
+                        "ENDCOND_LIM_SIMTIME": 2e-8, "ENABLE_ORBITWRITE": 1,
+                        "ORBITWRITE_MODE": 1, "ORBITWRITE_INTERVAL": 1e-9,
+                        "ORBITWRITE_NPOINT": 32, "ENABLE_DIST_5D": 1,
+                        "DIST_NBIN_R": 2, "DIST_NBIN_Z": 2,
+                        "DIST_NBIN_PPA": 4, "DIST_NBIN_PPE": 2})
+            a5.data.create_input("opt", **opt)
+            outputs = {}
+            for ranks in (1, 2, 4):
+                filename = directory / ("ranks%d.h5" % ranks)
+                shutil.copyfile(source, filename)
+                result = subprocess.run(
+                    ["mpiexec", "-n", str(ranks), executable,
+                     "--in=" + str(filename)], env=env, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    timeout=120)
+                (directory / ("ranks%d.log" % ranks)).write_text(result.stdout)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn("rank 0, size %d" % ranks, result.stdout)
+                run = Ascot(str(filename)).data.active
+                with h5py.File(filename, "r") as h5:
+                    group = h5["results/run_" + run.get_qid()]
+                    raw = {name: {key: value[:].ravel()
+                                  for key, value in group[name].items()}
+                           for name in ("orbit", "inistate", "endstate")}
+                for name, values in raw.items():
+                    order = np.lexsort((values["mileage"], values["ids"]))
+                    raw[name] = {key: value[order]
+                                 for key, value in values.items()
+                                 if key != "cputime"}
+                dist = run.getdist("5d")
+                moments = run.getdist_moments(dist, "density", "energydensity")
+                raw["dist"] = {"histogram": dist.histogram().v,
+                               "density": moments.ordinate("density").v,
+                               "energydensity":
+                                   moments.ordinate("energydensity").v}
+                outputs[ranks] = raw
+                endcond = run.getstate("endcond", state="end")
+                self.assertEqual(len(endcond), 7)
+                self.assertTrue(all(State.endcond_check(int(ec),
+                                                       "TLIM NOT ABORTED")
+                                    for ec in endcond))
+                np.testing.assert_allclose(
+                    dist.histogram().sum().v,
+                    np.sum(mrk["weight"]) * opt["ENDCOND_LIM_SIMTIME"],
+                    rtol=5e-14, atol=0)
+                with self.subTest(ranks=ranks):
+                    np.testing.assert_array_equal(
+                        np.unique(raw["orbit"]["ids"]), mrk["ids"])
+                    for mid in mrk["ids"]:
+                        mileage, radius = run.getorbit("mileage", "r", ids=mid)
+                        self.assertEqual(len(mileage), 22)
+                        self.assertLess(len(mileage), opt["ORBITWRITE_NPOINT"])
+                        self.assertEqual(mileage[0].to("s").v, 0)
+                        # The fixed-step end condition tests time > limit.
+                        np.testing.assert_allclose(
+                            mileage.to("s").v, np.arange(22) * 1e-9,
+                            rtol=5e-14, atol=0)
+                        np.testing.assert_array_equal(
+                            radius.to("m").v,
+                            raw["orbit"]["r"][raw["orbit"]["ids"] == mid])
+                    for values in raw.values():
+                        for value in values.values():
+                            self.assertTrue(np.isfinite(value).all())
+                    if ranks == 1:
+                        continue
+                    for name, values in raw.items():
+                        self.assertEqual(values.keys(), outputs[1][name].keys())
+                        for key, value in values.items():
+                            if name == "dist":
+                                np.testing.assert_allclose(
+                                    value, outputs[1][name][key],
+                                    rtol=5e-14, atol=0, err_msg=key)
+                            else:
+                                np.testing.assert_array_equal(
+                                    value, outputs[1][name][key], err_msg=key)
+
 
 class TestVmecField(unittest.TestCase):
     """Test the VMEC field template on a synthetic rotating ellipse.
