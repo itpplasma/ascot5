@@ -1,0 +1,5 @@
+The left panel compares the cached field after 1 microsecond of adaptive guiding-centre motion and collisions with the exact Cartesian field (1, 2, 3) T. The test uses a 3.5 MeV alpha particle at R = 7.6 m, pitch 0.9, the native flat plasma template, and orbit tolerance 1e-10. Only the initial cumulative toroidal angle changes. The plotted error is the Euclidean norm of the Cartesian field difference, in tesla.
+
+The right panel uses the native analytic circular tokamak field and the same marker energy, radius, pitch and tolerance. Axial symmetry requires the suggested step to be independent of the added toroidal turns. Each Cash–Karp proposal uses a prescribed 1e-7 s step; the ordinate is hnext(phi)/hnext(0) - 1. The proposed R, Z, parallel momentum and magnetic moment are bitwise identical before and after the change at all 201 tested angles.
+
+Before: b1a9665229c19c8d1b7be198140523867e3f25ed. Fixed: 97643a8e964216f060d59bf854d74bb2b5d8bf06. All data are synthetic. Run `MPLBACKEND=Agg python plot.py` here to render the figure from the supplied JSON data.
