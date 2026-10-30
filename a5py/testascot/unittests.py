@@ -653,6 +653,100 @@ class TestAscot(unittest.TestCase):
         super(TestAscot, cls).tearDownClass()
         subprocess.run(["rm", "-f", "unittest.h5"])
 
+    def test_gc_error_toroidal_turns(self):
+        """A toroidal turn count must not change an axisymmetric error estimate."""
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        a5 = Ascot("unittest.h5")
+        a5.data.active.efield.activate()
+        step = ascot2py._libraries["libascot.so"].step_gc_cashkarp
+        step.argtypes = [ctypes.POINTER(ascot2py.particle_simd_gc),
+                         ctypes.POINTER(ctypes.c_double),
+                         ctypes.POINTER(ctypes.c_double), ctypes.c_double,
+                         ctypes.POINTER(ascot2py.B_field_data),
+                         ctypes.POINTER(ascot2py.E_field_data), ctypes.c_int]
+        mrk = Marker.generate("gc", n=1, species="alpha")
+        mrk["r"][:] = 7.6
+        mrk["phi"][:] = 0
+        mrk["energy"][:] = 3.5e6
+        mrk["pitch"][:] = 0.9
+        p = ascot2py.particle_simd_gc()
+        ascot2py.particle_allocate_gc(ctypes.byref(p), 1)
+        try:
+            a5.simulation_initinputs()
+            a5.simulation_initmarkers(**mrk)
+            for dt in [1e-7, 1e-8, 1e-9]:
+                suggestions = []
+                states = []
+                for phi in [0, 2*np.pi*16384]:
+                    initial = a5._inistate[0]
+                    initial.phi = phi
+                    err = ascot2py.particle_state_to_gc(
+                        ctypes.byref(initial), 0, ctypes.byref(p), 0,
+                        ctypes.byref(a5._sim.B_data))
+                    self.assertEqual(err, 0)
+                    h = (ctypes.c_double * 1)(dt)
+                    hnext = (ctypes.c_double * 1)()
+                    step(ctypes.byref(p), h, hnext, 1e-10,
+                         ctypes.byref(a5._sim.B_data),
+                         ctypes.byref(a5._sim.E_data), 0)
+                    self.assertEqual(p.err[0], 0)
+                    suggestions.append(hnext[0])
+                    states.append([p.r[0], p.z[0], p.ppar[0], p.mu[0]])
+                with self.subTest(timestep=dt):
+                    self.assertTrue(np.isfinite(suggestions).all())
+                    self.assertEqual(suggestions[0], suggestions[1])
+                    np.testing.assert_array_equal(states[0], states[1])
+        finally:
+            for name, _ in p._fields_:
+                if name != "n_mrk":
+                    ascot2py.libascot_deallocate(getattr(p, name))
+            a5.simulation_free()
+
+    def test_gc_collision_field_cache(self):
+        """Collisions must cache the field at the stored cumulative angle."""
+        import ctypes
+        from a5py.ascot5io.options import Opt
+        from a5py.ascotpy import ascot2py
+
+        a5 = Ascot("unittest.h5")
+        original = a5.data.bfield.active
+        a5.data.active.efield.activate()
+        a5.data.create_input("B_TC", bxyz=np.array([1.0, 2.0, 3.0]),
+                             jacobian=np.zeros((3, 3)), rhoval=0.5,
+                             activate=True)
+        opt = Opt.get_default()
+        opt.update(SIM_MODE=2, ENABLE_ORBIT_FOLLOWING=1,
+                   ENABLE_COULOMB_COLLISIONS=1, ENABLE_ADAPTIVE=1,
+                   ADAPTIVE_TOL_ORBIT=1e-10, ENDCOND_SIMTIMELIM=1,
+                   ENDCOND_MAX_MILEAGE=1e-6)
+        mrk = Marker.generate("gc", n=1, species="alpha")
+        mrk["r"][:] = 7.6
+        mrk["phi"][:] = np.rad2deg(1e5)
+        mrk["energy"][:] = 3.5e6
+        mrk["pitch"][:] = 0.9
+        try:
+            a5.simulation_initinputs()
+            a5.simulation_initoptions(**opt)
+            a5.simulation_initmarkers(**mrk)
+            run = a5.simulation_run(printsummary=False)
+            endcond = run.getstate("endcond", state="end")
+            self.assertTrue(State.endcond_check(
+                int(endcond[0]), "TLIM NOT ABORTED"))
+            end = a5._endstate[0]
+            field = (ctypes.c_double * 15)()
+            err = ascot2py.B_field_eval_B_dB(
+                field, end.r, end.phi, end.z, end.time,
+                ctypes.byref(a5._sim.B_data))
+            self.assertEqual(err, 0)
+            np.testing.assert_array_equal(
+                [end.B_r, end.B_phi, end.B_z],
+                [field[0], field[4], field[8]])
+        finally:
+            a5.simulation_free()
+            original.activate()
+
     def test_gc_conservation(self):
         """Adaptive GC tolerance must control drift over a long static orbit."""
         from a5py.ascot5io.options import Opt

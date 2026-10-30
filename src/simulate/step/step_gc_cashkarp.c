@@ -194,26 +194,28 @@ void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
             /* Error estimate is a difference between RK4 and RK5 solutions. If
              * time-step is accepted, the RK5 solution will be used to advance
              * marker. */
-            real rk5[6], rk4[6];
+            real rk5[6], rk4[6], delta[6];
             if(!errflag) {
                 real err = 0.0;
                 for(int j = 0; j < 6; j++) {
-                    rk5[j] = yprev[j]
-                        + h[i]*(
+                    real inc5 = h[i]*(
                               ( 37.0/378 ) * k1[j]
                             + (250.0/621 ) * k3[j]
                             + (125.0/594 ) * k4[j]
                             + (512.0/1771) * k6[j] );
 
-                    rk4[j] = yprev[j] +
-                        h[i]*(
+                    real inc4 = h[i]*(
                               ( 2825.0/27648) * k1[j]
                             + (18575.0/48384) * k3[j]
                             + (13525.0/55296) * k4[j]
                             + (  277.0/14336) * k5[j]
                             + (    1.0/4    ) * k6[j] );
+                    /* Accumulated turns must not round away the embedded error. */
+                    delta[j] = inc5 - inc4;
+                    rk5[j] = yprev[j] + inc5;
+                    rk4[j] = yprev[j] + inc4;
                     if(j==3) {
-                        real yerr = fabs(rk5[j] - rk4[j]);
+                        real yerr = fabs(delta[j]);
                         real ytol = fabs(yprev[j]) + fabs(k1[j]*h[i])
                                     + DBL_EPSILON;
                         err = fmax( err, yerr/ytol );
@@ -224,10 +226,10 @@ void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
                         real dz = h[i]*k1[2];
                         /* Use displacement and avoid cancellation at small errors. */
                         real yerr =
-                              pow(rk5[0] - rk4[0], 2)
+                              pow(delta[0], 2)
                             + 4 * rk5[0] * rk4[0]
-                                * pow(sin((rk5[1] - rk4[1])/2), 2)
-                            + pow(rk5[2] - rk4[2], 2);
+                                * pow(sin(delta[1]/2), 2)
+                            + pow(delta[2], 2);
                         real ytol =
                               dr*dr + dz*dz
                             + 4 * yprev[0] * (yprev[0] + dr)

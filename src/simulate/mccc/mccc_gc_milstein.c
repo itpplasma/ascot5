@@ -209,6 +209,10 @@ void mccc_gc_milstein(particle_simd_gc* p, real* hin, real* acc, real* collfreq,
             /* Back to cylindrical coordinates */
             real Xout_rpz[3];
             math_xyz2rpz(Xout_xyz, Xout_rpz);
+            /* Cache the field at the same rounded angle that the orbit uses. */
+            Xout_rpz[1] = p->phi[i] + atan2(
+                Xin_xyz[0] * Xout_xyz[1] - Xin_xyz[1] * Xout_xyz[0],
+                Xin_xyz[0] * Xout_xyz[0] + Xin_xyz[1] * Xout_xyz[1]);
 
             /* Evaluate magnetic field (and gradient) and rho at new position */
             real B_dB[15], psi[1], rho[2];
@@ -259,10 +263,7 @@ void mccc_gc_milstein(particle_simd_gc* p, real* hin, real* acc, real* collfreq,
                                       - (z0-axisrz[1]) * (p->r[i]-axisrz[0]),
                                         (R0-axisrz[0]) * (p->r[i]-axisrz[0])
                                       + (z0-axisrz[1]) * (p->z[i]-axisrz[1]) );
-                p->phi[i] += atan2(   Xin_xyz[0] * Xout_xyz[1]
-                                    - Xin_xyz[1] * Xout_xyz[0],
-                                      Xin_xyz[0] * Xout_xyz[0]
-                                    + Xin_xyz[1] * Xout_xyz[1] );
+                p->phi[i] = Xout_rpz[1];
             }
 
             /* Check whether timestep was rejected and suggest next time step */
