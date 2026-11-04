@@ -728,6 +728,61 @@ class TestAscot(unittest.TestCase):
                     ascot2py.libascot_deallocate(getattr(p, name))
             a5.simulation_free()
 
+    def test_gc_collision_repeated_pitch_reflection(self):
+        """Large finite kicks must retain nonnegative magnetic moment."""
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        a5 = Ascot("unittest.h5")
+        original = a5.data.bfield.active
+        a5.data.active.efield.activate()
+        a5.data.create_input("B_TC", bxyz=np.array([0., 0., 2.]),
+                            jacobian=np.zeros((3, 3)), rhoval=0.5,
+                            activate=True)
+        marker = Marker.generate("gc", n=1, species="alpha")
+        marker["r"][:] = 7.6
+        marker["phi"][:] = 0
+        marker["energy"][:] = 3.5e6
+        marker["pitch"][:] = 0.3
+        p = ascot2py.particle_simd_gc()
+        ascot2py.particle_allocate_gc(ctypes.byref(p), 1)
+        data = type(a5._sim.mccc_data)()
+        library = ascot2py._libraries["libascot.so"]
+        initialize = library.mccc_init
+        initialize.argtypes = [ctypes.POINTER(type(data)), ctypes.c_int,
+                               ctypes.c_int, ctypes.c_int]
+        initialize(ctypes.byref(data), 0, 1, 0)
+        kernel = library.mccc_gc_euler
+        kernel.argtypes = [ctypes.POINTER(ascot2py.particle_simd_gc),
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.POINTER(ascot2py.B_field_data),
+            ctypes.POINTER(type(a5._sim.plasma_data)),
+            ctypes.POINTER(type(data)), ctypes.POINTER(ctypes.c_double)]
+        try:
+            a5.simulation_initinputs()
+            a5.simulation_initmarkers(**marker)
+            for noise in [-1e4, 1e4]:
+                with self.subTest(noise=noise):
+                    err = ascot2py.particle_state_to_gc(
+                        ctypes.byref(a5._inistate[0]), 0,
+                        ctypes.byref(p), 0, ctypes.byref(a5._sim.B_data))
+                    self.assertEqual(err, 0)
+                    h = (ctypes.c_double * 1)(0.01)
+                    rnd = (ctypes.c_double * 5)(0, 0, 0, 0, noise)
+                    kernel(ctypes.byref(p), h,
+                        ctypes.byref(a5._sim.B_data),
+                        ctypes.byref(a5._sim.plasma_data),
+                        ctypes.byref(data), rnd)
+                    self.assertEqual(p.err[0], 0)
+                    self.assertTrue(np.isfinite([p.ppar[0], p.mu[0]]).all())
+                    self.assertGreaterEqual(p.mu[0], 0)
+        finally:
+            for name, _ in p._fields_:
+                if name != "n_mrk":
+                    ascot2py.libascot_deallocate(getattr(p, name))
+            a5.simulation_free()
+            original.activate()
+
     def test_gc_collision_field_cache(self):
         """Collisions must cache the field at the stored cumulative angle."""
         import ctypes
