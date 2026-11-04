@@ -9,12 +9,18 @@ from functools import wraps
 from . import species
 from a5py.exceptions import AscotUnitWarning
 
-e     = constants.elementary_charge * unyt.C
-m_e   = constants.physical_constants["electron mass"][0] * unyt.kg
+# Values of src/consts.h, so Python and the executable agree on every marker.
+CONST_E  = 1.602176565e-19
+CONST_U  = 1.660538921e-27
+CONST_ME = 9.1094e-31
+CONST_E0 = 8.8542e-12
+
+e     = CONST_E * unyt.C
+m_e   = CONST_ME * unyt.kg
 m_p   = constants.physical_constants["proton mass"][0] * unyt.kg
 m_a   = constants.physical_constants["alpha particle mass"][0] * unyt.kg
 c     = unyt.c
-eps_0 = unyt.eps_0
+eps_0 = CONST_E0 * unyt.F / unyt.m
 
 def cart2pol(x, y, z=None):
     """Convert a point in cartesian coordinates to polar coordinates.

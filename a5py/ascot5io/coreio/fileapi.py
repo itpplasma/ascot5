@@ -572,6 +572,15 @@ def copy_group(fs, ft, group, newgroup=False):
 
     return newgroupobj
 
+# The executable converts eV with its elementary charge (src/consts.h), which
+# differs from unyt's eV in the ninth digit; files must round-trip exactly.
+_EV_TO_EXECUTABLE_EV = float((1 * unyt.eV).to("J").v) / 1.602176565e-19
+
+def _ev_power(unit):
+    """Return the power of eV in a unit string."""
+    powers = unyt.Unit(unit).expr.as_powers_dict()
+    return sum(power for symbol, power in powers.items() if str(symbol) == "eV")
+
 def write_data(group, name, data, shape, dtype, unit=None, compress=False):
     """Write a dataset.
 
@@ -592,6 +601,8 @@ def write_data(group, name, data, shape, dtype, unit=None, compress=False):
     compress : boolean, optional
         Use gzip compression
     """
+    if unit is not None and _ev_power(unit) != 0:
+        data = np.asarray(data, dtype=float) * _EV_TO_EXECUTABLE_EV**_ev_power(unit)
     if compress:
         g = group.create_dataset(
             name  = name,
@@ -633,6 +644,9 @@ def read_data(group, name):
         if unit_str.lower() == "ev":
             unit_str = "eV"
         unit     = unyt.Unit(unit_str)
+        power    = _ev_power(unit_str)
+        if power != 0:
+            return group[name][:].ravel() / _EV_TO_EXECUTABLE_EV**power * unit
 
     return group[name][:].ravel() * unit
 

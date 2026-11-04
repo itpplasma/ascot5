@@ -2055,5 +2055,42 @@ class TestPlotting(unittest.TestCase):
 
         plt.show(block=False)
 
+class TestExecutableConstants(unittest.TestCase):
+    """Python must decode files with the constants of src/consts.h."""
+
+    @staticmethod
+    def _header():
+        text = (Path(__file__).resolve().parents[2]/"src"/"consts.h").read_text()
+        return {name: float(value) for name, value in
+                __import__("re").findall(r"#define (CONST_\w+)\s+([-+.\deE]+)", text)}
+
+    def test_physlib_matches_header(self):
+        import a5py.physlib as physlib
+        header = self._header()
+        self.assertEqual(physlib.e.to("C").v, header["CONST_E"])
+        self.assertEqual(physlib.m_e.to("kg").v, header["CONST_M_E"])
+        self.assertEqual(physlib.eps_0.to("F/m").v, header["CONST_E0"])
+        self.assertEqual((1*unyt.amu).to("kg").v, header["CONST_U"])
+
+    def test_ev_round_trip_as_executable_reads_it(self):
+        const_e = self._header()["CONST_E"]
+        energy = np.array([55e3, 3.5e6]) * unyt.eV
+        mu = np.array([1.25e4, 7.5e5]) * unyt.eV / unyt.T
+        with tempfile.TemporaryDirectory() as tmp, h5py.File(Path(tmp)/"f.h5", "w") as f:
+            fileapi.write_data(f, "energy", energy, energy.shape, "f8", unit="eV")
+            fileapi.write_data(f, "mu", mu, mu.shape, "f8", unit="eV/T")
+            # src/hdf5io/hdf5_marker.c multiplies the stored eV by CONST_E.
+            np.testing.assert_allclose(f["energy"][:]*const_e, energy.to("J").v,
+                                       rtol=2e-16, atol=0)
+            np.testing.assert_allclose(f["mu"][:]*const_e, mu.to("J/T").v,
+                                       rtol=2e-16, atol=0)
+            np.testing.assert_allclose(fileapi.read_data(f, "energy").to("J").v,
+                                       energy.to("J").v, rtol=2e-16, atol=0)
+            np.testing.assert_allclose(fileapi.read_data(f, "mu").to("J/T").v,
+                                       mu.to("J/T").v, rtol=2e-16, atol=0)
+            # Plain unit strings stay untouched.
+            fileapi.write_data(f, "r", np.array([5.5]), (1,), "f8", unit="m")
+            self.assertEqual(f["r"][0], 5.5)
+
 if __name__ == '__main__':
     unittest.main()
