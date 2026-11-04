@@ -1515,7 +1515,7 @@ class TestCollisionCoefficients(unittest.TestCase):
                             h = speed*1e-5
                             v = np.array([speed-h, speed, speed+h])*unyt.m/unyt.s
                             d, dd, q, dq, k, f, dp = a5.input_eval_collcoefs(
-                                mass*unyt.kg, charge*1.602176565e-19*unyt.C,
+                                mass*unyt.kg, charge*1.602176634e-19*unyt.C,
                                 6.5*unyt.m, 0*unyt.rad, 0*unyt.m, 0*unyt.s,
                                 v, "dpara", "ddpara", "q", "dq", "k", "f", "dperp")
                             np.testing.assert_allclose(dd[:, 0, 1].v,

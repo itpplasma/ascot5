@@ -572,9 +572,9 @@ def copy_group(fs, ft, group, newgroup=False):
 
     return newgroupobj
 
-# The executable converts eV with its elementary charge (src/consts.h), which
-# differs from unyt's eV in the ninth digit; files must round-trip exactly.
-_EV_TO_EXECUTABLE_EV = float((1 * unyt.eV).to("J").v) / 1.602176565e-19
+# The executable converts eV with its elementary charge (src/consts.h);
+# files must round-trip exactly even if that differs from unyt's eV.
+_EV_TO_EXECUTABLE_EV = float((1 * unyt.eV).to("J").v) / 1.602176634e-19
 
 def _ev_power(unit):
     """Return the power of eV in a unit string."""
