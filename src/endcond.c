@@ -147,16 +147,23 @@ void endcond_check_fo(particle_simd_fo* p_f, particle_simd_fo* p_i,
                     math_vec_rpz2xyz(pf, pxyz_f, p_f->phi[i]);
                     for(int j = 0; j < 3; j++)
                         pxyz_f[j] = pxyz_i[j] + w*(pxyz_f[j] - pxyz_i[j]);
-                    math_vec_xyz2rpz(pxyz_f, pf, atan2(y, x));
-                    p_f->p_r[i] = pf[0]; p_f->p_phi[i] = pf[1]; p_f->p_z[i] = pf[2];
 
                     real phi = atan2(y, x) - p_i->phi[i];
                     p_f->time[i] = p_i->time[i] + w*(p_f->time[i] - p_i->time[i]);
                     p_f->mileage[i] = p_i->mileage[i]
                                      + w*(p_f->mileage[i] - p_i->mileage[i]);
-                    p_f->r[i]    = hypot(x, y);
-                    p_f->phi[i]  = p_i->phi[i] + atan2(sin(phi), cos(phi));
+                    if(sim->wall_data.type == wall_type_3D) {
+                        p_f->r[i] = hypot(x, y);
+                        p_f->phi[i] = p_i->phi[i] + atan2(sin(phi), cos(phi));
+                    }
+                    else {
+                        p_f->r[i] = p_i->r[i] + w*(p_f->r[i] - p_i->r[i]);
+                        p_f->phi[i] = p_i->phi[i] + w*(p_f->phi[i] - p_i->phi[i]);
+                    }
                     p_f->z[i]    = p_i->z[i]    + w*(p_f->z[i] - p_i->z[i]);
+                    /* Use the recorded angle: the 2D wall branch interpolates phi. */
+                    math_vec_xyz2rpz(pxyz_f, pf, p_f->phi[i]);
+                    p_f->p_r[i] = pf[0]; p_f->p_phi[i] = pf[1]; p_f->p_z[i] = pf[2];
 
                     real B_dB[15], psi[1], rho[2];
                     a5err wallerr = B_field_eval_B_dB(B_dB, p_f->r[i], p_f->phi[i],
@@ -374,8 +381,14 @@ void endcond_check_gc(particle_simd_gc* p_f, particle_simd_gc* p_i,
                     p_f->time[i] = p_i->time[i] + w*(p_f->time[i] - p_i->time[i]);
                     p_f->mileage[i] = p_i->mileage[i]
                                      + w*(p_f->mileage[i] - p_i->mileage[i]);
-                    p_f->r[i] = hypot(x, y);
-                    p_f->phi[i] = p_i->phi[i] + atan2(sin(phi), cos(phi));
+                    if(sim->wall_data.type == wall_type_3D) {
+                        p_f->r[i] = hypot(x, y);
+                        p_f->phi[i] = p_i->phi[i] + atan2(sin(phi), cos(phi));
+                    }
+                    else {
+                        p_f->r[i] = p_i->r[i] + w*(p_f->r[i] - p_i->r[i]);
+                        p_f->phi[i] = p_i->phi[i] + w*(p_f->phi[i] - p_i->phi[i]);
+                    }
                     p_f->z[i] = p_i->z[i] + w*(p_f->z[i] - p_i->z[i]);
                     p_f->ppar[i] = p_i->ppar[i] + w*(p_f->ppar[i] - p_i->ppar[i]);
                     p_f->mu[i] = p_i->mu[i] + w*(p_f->mu[i] - p_i->mu[i]);
