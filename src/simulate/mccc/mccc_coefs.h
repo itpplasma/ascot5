@@ -276,6 +276,26 @@ inline static void mccc_coefs_clog(
     }
 }
 
+/** @brief Speed derivative of the Coulomb logarithms [s/m]. */
+GPU_DECLARE_TARGET_SIMD_UNIFORM(nspec, mb, qb, Tb)
+inline static void mccc_coefs_dclog(
+        real* dclogab, real ma, real qa, real va, int nspec,
+        const real* mb, const real* qb, const real* Tb) {
+    GPU_SEQUENTIAL_LOOP
+    for(int i = 0; i < nspec; i++) {
+#ifdef MCCC_CLOG_NRL_REFERENCE_EV
+        dclogab[i] = 0;
+#else
+        real vbar = va*va + 2*Tb[i]/mb[i];
+        real mr = ma*mb[i]/(ma+mb[i]);
+        real bcl = fabs(qa*qb[i]/(4*CONST_PI*CONST_E0*mr*vbar));
+        real bqm = fabs(CONST_HBAR/(2*mr*sqrt(vbar)));
+        dclogab[i] = (bcl > bqm ? 2 : 1)*va/vbar;
+#endif
+    }
+}
+DECLARE_TARGET_END
+
 /**
  * @brief Evaluate special functions needed by collision coefficients
  *

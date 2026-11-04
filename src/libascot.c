@@ -830,9 +830,10 @@ void libascot_eval_collcoefs(
             for(int ib=0; ib<n_species; ib++) {
 
                 /* Coulomb logarithm */
-                real clogab[MAX_SPECIES];
+                real clogab[MAX_SPECIES], dclogab[MAX_SPECIES];
                 mccc_coefs_clog(clogab, ma, qa, va[iv], n_species, mb, qb,
                                 nb, Tb);
+                mccc_coefs_dclog(dclogab, ma, qa, va[iv], n_species, mb, qb, Tb);
 
                 /* Special functions */
                 real vb = sqrt( 2 * Tb[ib] / mb[ib] );
@@ -853,6 +854,11 @@ void libascot_eval_collcoefs(
                 real dDparab = mccc_coefs_dDpara(ma, qa, va[iv], qb[ib], nb[ib],
                                                  vb, clogab[ib], mufun[0],
                                                  mufun[2]);
+                /* Total derivatives include the speed-dependent logarithm. */
+                real logderiv = dclogab[ib]/clogab[ib];
+                dDparab += Dparab*logderiv;
+                dQb += Qb*logderiv;
+                Fb += Dparab*logderiv;
                 real Kb      = mccc_coefs_K(va[iv], Dparab, dDparab, Qb);
                 real nub     = mccc_coefs_nu(va[iv], Dperpb);
 
