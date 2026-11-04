@@ -421,7 +421,7 @@ int wall_3d_hit_wall_full(real r1, real phi1, real z1, real r2, real phi2,
     for(j = 0; j < wdata->n; j++) {
         w = wall_3d_tri_collision(q1, q2, &wdata->wall_tris[9*j],
                 &wdata->wall_tris[9*j+3], &wdata->wall_tris[9*j+6]);
-        if(w > 0) {
+        if(w >= 0) {
             if(w < smallest_w) {
                 smallest_w = w;
                 hit_tri = j+1;

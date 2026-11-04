@@ -289,6 +289,30 @@ class TestAscot5IO(unittest.TestCase):
             self.assertFalse("results" in h5,
                             "Results not removed in HDF5.")
 
+    def test_wall_start_contact(self):
+        """Accelerated and full searches include the same segment endpoints."""
+        import ctypes
+        from a5py.ascotpy import ascot2py as a5
+        x = np.array([1., 1., 1.])
+        y = np.array([-1., 2., -1.])
+        z = np.array([-1., -1., 2.])
+        flag = np.zeros(1, dtype=np.int32)
+        pointer = ctypes.POINTER(ctypes.c_double)
+        wall = a5.wall_3d_data()
+        self.assertEqual(a5.wall_3d_init(ctypes.byref(wall), 1,
+            x.ctypes.data_as(pointer), y.ctypes.data_as(pointer),
+            z.ctypes.data_as(pointer),
+            flag.ctypes.data_as(ctypes.POINTER(ctypes.c_int))), 0)
+        try:
+            for search in [a5.wall_3d_hit_wall, a5.wall_3d_hit_wall_full]:
+                fraction = ctypes.c_double(-1.)
+                tile = search(1., 0., 0., 1.5, 0., 0., ctypes.byref(wall),
+                              ctypes.byref(fraction))
+                self.assertEqual(tile, 1)
+                self.assertEqual(fraction.value, 0.)
+        finally:
+            a5.wall_3d_free(ctypes.byref(wall))
+
     def test_endcond(self):
         """Test end conditions are parsed properly
         """
