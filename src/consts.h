@@ -28,8 +28,9 @@
 /** @brief Speed of light to power of three [m^3/s^3]                         */
 #define CONST_C3 26944002417373989539335912.0
 
-/** @brief Atomic mass unit in kilograms [kg]                                 */
-#define CONST_U 1.66053906660e-27
+/** @brief Atomic mass unit in kilograms [kg]; unyt's amu, which a5py uses to
+ *         convert marker masses, so files round-trip exactly             */
+#define CONST_U 1.660538921e-27
 
 /** @brief Elementary charge [C]                                              */
 #define CONST_E 1.602176634e-19

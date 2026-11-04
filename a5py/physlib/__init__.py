@@ -11,7 +11,7 @@ from a5py.exceptions import AscotUnitWarning
 
 # Values of src/consts.h, so Python and the executable agree on every marker.
 CONST_E  = 1.602176634e-19
-CONST_U  = 1.66053906660e-27
+CONST_U  = 1.660538921e-27
 CONST_ME = 9.1093837015e-31
 CONST_E0 = 8.8541878128e-12
 
