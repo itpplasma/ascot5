@@ -567,6 +567,34 @@ class TestVmecField(unittest.TestCase):
         self.assertLess(np.max(np.abs(rho**2 - expected)), 1e-4,
                         "near-axis points received exterior flux labels")
 
+    def test_lcfs_grid_envelope(self):
+        """The cylindrical grid must include LCFS extrema between samples.
+        """
+        import netCDF4
+        wout = self.writewout(-2.0)
+        a5 = Ascot(self.testfilename, create=True)
+        a5.data.create_input("vmec_sts", ncfile=wout, phimin=0, phimax=72,
+                             nphi=24, ntheta=120, nr=60, nz=60, activate=True)
+        with netCDF4.Dataset(wout) as f:
+            m, n = np.array(f["xm"][:]), np.array(f["xn"][:])
+            rc, zc = np.array(f["rmnc"][-1]), np.array(f["zmns"][-1])
+        u, v = np.meshgrid(np.linspace(0, 2*np.pi, 361),
+                           np.linspace(0, 2*np.pi/5, 37, endpoint=False))
+        u, v = u.ravel(), v.ravel()
+        phase = u[:,None]*m-v[:,None]*n
+        r, z = np.cos(phase)@rc, np.sin(phase)@zc
+        a5.input_init(bfield=True)
+        try:
+            br, bp, bz, rho = a5.input_eval(
+                r*unyt.m, v*unyt.rad, z*unyt.m, 0*unyt.s,
+                "br", "bphi", "bz", "rho")
+            for value in (br, bp, bz, rho):
+                self.assertTrue(np.isfinite(value).all(),
+                                "LCFS lies outside the field grid")
+            self.assertLess(np.max(abs(rho.v-1)), 1e-3)
+        finally:
+            a5.input_free()
+
     def test_field(self):
         """Test B and rho near and outside the LCFS against the VMEC sums
         """
