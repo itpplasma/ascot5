@@ -6,6 +6,7 @@
 #define MCCC_COEFS_H
 
 #include <math.h>
+#include <float.h>
 #include "../../ascot5.h"
 #include "../../consts.h"
 #include "mccc.h"
@@ -228,6 +229,26 @@ DECLARE_TARGET_END
 inline static void mccc_coefs_clog(
         real* clogab, real ma, real qa, real va, int nspec, const real* mb,
         const real* qb, const real* nb, const real* Tb) {
+
+#ifdef MCCC_CLOG_NRL_REFERENCE_EV
+    /* Diagnostic: NRL thermal logarithms at a fixed test-ion reference energy.
+     * This isolates the logarithm prescription from the stochastic integrator.
+     * Species zero is the electron, as required by the plasma interface. */
+    const real proton_mass = 1.6726e-27;
+    real a = ma / proton_mass;
+    real z = fabs(qa / CONST_E);
+    real te = Tb[0] / CONST_E;
+    clogab[0] = 24 - log(sqrt(nb[0]*1e-6) / te);
+    for(int i = 1; i < nspec; i++) {
+        real ab = mb[i] / proton_mass;
+        real zb = fabs(qb[i] / CONST_E);
+        real ti = Tb[i] / CONST_E;
+        real argument = sqrt(nb[i]*1e-6*zb*zb/ti) * z*zb*(a+ab)
+            / (a*ti + ab*MCCC_CLOG_NRL_REFERENCE_EV);
+        clogab[i] = 23 - log(fmax(DBL_EPSILON, argument));
+    }
+    return;
+#endif
 
     /* Evaluate Debye length */
     real sum = 0;
