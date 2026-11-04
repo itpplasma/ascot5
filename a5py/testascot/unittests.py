@@ -1492,6 +1492,42 @@ class TestPowerDeposition(unittest.TestCase):
                     moment.ordinate("electronpowerdep")
                     + moment.ordinate("ionpowerdep"), rtol=1e-12, atol=1e-30)
 
+class TestCollisionCoefficients(unittest.TestCase):
+    """Collision derivatives must include the speed-dependent logarithm."""
+
+    def test_native_speed_derivatives(self):
+        with tempfile.TemporaryDirectory() as directory:
+            a5 = Ascot(str(Path(directory) / "input.h5"), create=True)
+            a5.data.create_input("B_TC", bxyz=np.array([0., 0., 2.]),
+                jacobian=np.zeros((3, 3)), rhoval=0.5, activate=True)
+            a5.data.create_input("plasma_1D", nrho=3, nion=2,
+                anum=np.array([1, 12]), znum=np.array([1, 6]),
+                mass=np.array([1., 12.]), charge=np.array([1, 6]),
+                rho=np.array([0., 0.5, 2.]), edensity=np.full(3, 9.2e19),
+                idensity=np.tile([8e19, 2e18], (3, 1)),
+                etemperature=np.full(3, 1000.),
+                itemperature=np.full(3, 1000.), vtor=np.zeros(3), activate=True)
+            a5.input_init(bfield=True, plasma=True)
+            try:
+                for mass, charge in [(1.6726e-27, 1), (6.6904e-27, 2)]:
+                    for speed in [2e4, 1e5, 5e5, 2e6, 1e7]:
+                        with self.subTest(mass=mass, speed=speed):
+                            h = speed*1e-5
+                            v = np.array([speed-h, speed, speed+h])*unyt.m/unyt.s
+                            d, dd, q, dq, k, f, dp = a5.input_eval_collcoefs(
+                                mass*unyt.kg, charge*1.602176565e-19*unyt.C,
+                                6.5*unyt.m, 0*unyt.rad, 0*unyt.m, 0*unyt.s,
+                                v, "dpara", "ddpara", "q", "dq", "k", "f", "dperp")
+                            np.testing.assert_allclose(dd[:, 0, 1].v,
+                                (d[:, 0, 2]-d[:, 0, 0]).v/(2*h), rtol=3e-5)
+                            np.testing.assert_allclose(dq[:, 0, 1].v,
+                                (q[:, 0, 2]-q[:, 0, 0]).v/(2*h), rtol=3e-5)
+                            np.testing.assert_allclose(k[:, 0, 1].v,
+                                f[:, 0, 1].v+2*dp[:, 0, 1].v/speed, rtol=1e-10)
+            finally:
+                a5.input_free()
+
+
 class TestAdaptiveTimeLimit(unittest.TestCase):
     """Adaptive GC steps must end at the requested physical time."""
 

@@ -255,6 +255,26 @@ inline static void mccc_coefs_clog(
     }
 }
 
+/** @brief Speed derivative of the Coulomb logarithms [s/m]. */
+GPU_DECLARE_TARGET_SIMD_UNIFORM(nspec, mb, qb, Tb)
+inline static void mccc_coefs_dclog(
+        real* dclogab, real ma, real qa, real va, int nspec,
+        const real* mb, const real* qb, const real* Tb) {
+    GPU_SEQUENTIAL_LOOP
+    for(int i = 0; i < nspec; i++) {
+#ifdef MCCC_CLOG_NRL_REFERENCE_EV
+        dclogab[i] = 0;
+#else
+        real vbar = va*va + 2*Tb[i]/mb[i];
+        real mr = ma*mb[i]/(ma+mb[i]);
+        real bcl = fabs(qa*qb[i]/(4*CONST_PI*CONST_E0*mr*vbar));
+        real bqm = fabs(CONST_HBAR/(2*mr*sqrt(vbar)));
+        dclogab[i] = (bcl > bqm ? 2 : 1)*va/vbar;
+#endif
+    }
+}
+DECLARE_TARGET_END
+
 /**
  * @brief Evaluate special functions needed by collision coefficients
  *
@@ -274,7 +294,16 @@ inline static void mccc_coefs_clog(
  */
 inline static void mccc_coefs_mufun(real mufun[3], real x, mccc_data* mdata) {
 
-    if(!mdata->usetabulated && x!= 0) {
+    if(!mdata->usetabulated && fabs(x) < 0.1) {
+        /* The direct difference loses precision before its derivative does. */
+        real y = x*x;
+        mufun[0] = 4*x/CONST_SQRTPI * (1.0/3 + y*(-1.0/5 + y*(1.0/14
+            + y*(-1.0/54 + y*(1.0/264 + y*(-1.0/1560 + y/10800))))));
+        mufun[1] = erf(x) - 0.5*mufun[0];
+        mufun[2] = 4/CONST_SQRTPI * (1.0/3 + y*(-3.0/5 + y*(5.0/14
+            + y*(-7.0/54 + y*(9.0/264 + y*(-11.0/1560 + 13*y/10800))))));
+    }
+    else if(!mdata->usetabulated && x!= 0) {
         real expm2x = exp(-x*x);
         real erfx   = erf(x);
 
