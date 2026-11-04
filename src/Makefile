@@ -186,7 +186,7 @@ OBJS= math.o list.o octree.o error.o \
 	asigma.o mpi_interface.o boschhale.o bbnbi5.o rfof.o \
 	asigma.o mpi_interface.o boschhale.o bbnbi5.o
 
-BINS=test_math test_nbi test_bsearch \
+BINS=test_math test_nbi test_bsearch test_gc_momentum \
 	test_wall_2d test_plasma test_random \
 	test_wall_3d test_B test_offload test_E \
 	test_interp1Dcomp test_linint3D test_N0 test_N0_1D \
@@ -209,6 +209,9 @@ bbnbi5: bbnbi5_main.o $(OBJS)
 
 doc:
 	doxygen Doxyfile
+
+test_gc_momentum: $(UTESTDIR)test_gc_momentum.o $(OBJS)
+	$(CC) -o $@ $^ $(CFLAGS)
 
 test_B: $(UTESTDIR)test_B.o $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
