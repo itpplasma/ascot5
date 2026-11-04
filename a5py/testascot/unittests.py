@@ -1009,6 +1009,24 @@ class TestAscot(unittest.TestCase):
                 msg="Trying to run without input should cause an error"):
             a5.simulation_run(printsummary=False)
 
+    def test_eval_many_quantities(self):
+        """Unit conversion must preserve all requested field quantities."""
+        a5 = Ascot("unittest.h5")
+        quantities = ["br", "bphi", "bz", "brdr", "brdphi", "brdz",
+                      "bphidr", "bphidphi", "bphidz", "bzdr", "bzdphi",
+                      "bzdz", "rho"] * 4
+        point = (6.2 * unyt.m, 0 * unyt.deg, 0 * unyt.m, 0 * unyt.s)
+        a5.input_init(bfield=True)
+        try:
+            actual = a5.input_eval(*point, *quantities)
+            self.assertEqual(len(actual), len(quantities))
+            for name, value in zip(quantities, actual):
+                expected = a5.input_eval(*point, name)
+                self.assertEqual(value.units, expected.units)
+                np.testing.assert_array_equal(value.v, expected.v)
+        finally:
+            a5.input_free()
+
     def test_eval(self):
         """Test :class:`Ascotpy` evaluation routines.
         """

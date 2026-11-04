@@ -298,7 +298,7 @@ def parseunits(strip=False, **units):
     def actualdecorator(fun):
         """Parse fun arguments that are expected to have units.
         """
-        argnames = list(fun.__code__.co_varnames)
+        argnames = fun.__code__.co_varnames[:fun.__code__.co_argcount]
         def checkandstrip(val, unit, name, assignedunits):
             """Check units of a given argument and strip if needed.
             """
@@ -330,7 +330,7 @@ def parseunits(strip=False, **units):
         def wrapper(*args, **kwargs):
             """Replace args and kwargs with parsed arguments when necessary.
             """
-            parsedargs = [None]*len(args)
+            parsedargs = list(args)
             assignedunits = {} # Dimensionless units with assigned units
             for i, name in enumerate(argnames):
                 if i == len(args): break
