@@ -186,7 +186,7 @@ OBJS= math.o list.o octree.o error.o \
 	asigma.o mpi_interface.o boschhale.o bbnbi5.o rfof.o \
 	asigma.o mpi_interface.o boschhale.o bbnbi5.o
 
-BINS=test_math test_nbi test_bsearch test_gc_momentum \
+BINS=test_math test_nbi test_bsearch test_gc_momentum test_particle_copy \
 	test_wall_2d test_plasma test_random \
 	test_wall_3d test_B test_offload test_E \
 	test_interp1Dcomp test_linint3D test_N0 test_N0_1D \
@@ -223,6 +223,9 @@ test_wall_3d: $(UTESTDIR)test_wall_3d.o $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
 
 test_math: $(UTESTDIR)test_math.o $(OBJS)
+	$(CC) -o $@ $^ $(CFLAGS)
+
+test_particle_copy: $(UTESTDIR)test_particle_copy.o $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
 
 test_wall_2d: $(UTESTDIR)test_wall_2d.o $(OBJS)
