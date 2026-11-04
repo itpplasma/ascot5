@@ -1590,6 +1590,61 @@ class TestAdaptiveTimeLimit(unittest.TestCase):
                     np.testing.assert_array_equal(
                         run.getstate("endcond", state="end"), np.full(8, 4))
 
+class TestFixedTimeLimit(unittest.TestCase):
+    """Fixed full-orbit steps must end at the requested physical time."""
+
+    def test_final_step_respects_time_limits(self):
+        binary = Path(__file__).resolve().parents[2] / "build/ascot5_main"
+        step, span = 1e-9, 1.05e-8
+        for reverse, mileage_limit in [(False, False), (False, True),
+                                        (True, False)]:
+            with self.subTest(reverse=reverse, mileage=mileage_limit):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "input.h5"
+                    a5 = Ascot(str(path), create=True)
+                    a5.data.create_input("B_TC", bxyz=np.array([0., 0., 2.]),
+                        jacobian=np.zeros((3, 3)), rhoval=0.5, activate=True)
+                    a5.data.create_input("E_TC", exyz=np.zeros(3), activate=True)
+                    for kind in ["plasma_1D", "wall_2D", "N0_1D", "Boozer",
+                                 "MHD_STAT", "asigma_loc"]:
+                        a5.data.create_input(kind, activate=True)
+                    start = 1e-7 if reverse else 0
+                    marker = Marker.generate("prt", n=8, species="H1")
+                    marker["r"][:] = 6.5
+                    marker["phi"][:] = 0
+                    marker["z"][:] = 0
+                    marker["vr"][:] = 1e6
+                    marker["vphi"][:] = 2e6
+                    marker["vz"][:] = 1e6
+                    marker["time"][:] = start
+                    a5.data.create_input("prt", **marker, activate=True)
+                    from a5py.ascot5io.options import Opt
+                    options = Opt.get_default()
+                    options.update(SIM_MODE=1, ENABLE_ADAPTIVE=0,
+                        ENABLE_ORBIT_FOLLOWING=1, ENABLE_COULOMB_COLLISIONS=0,
+                        FIXEDSTEP_USE_USERDEFINED=1,
+                        FIXEDSTEP_USERDEFINED=step, REVERSE_TIME=int(reverse),
+                        ENDCOND_SIMTIMELIM=1, ENDCOND_ENERGYLIM=0,
+                        ENDCOND_WALLHIT=0, ENDCOND_RHOLIM=0,
+                        ENDCOND_MAX_MILEAGE=span if mileage_limit else 1.,
+                        ENDCOND_LIM_SIMTIME=start - span if reverse else
+                            (1. if mileage_limit else span))
+                    a5.data.create_input("opt", **options, activate=True)
+                    result = subprocess.run([str(binary), "--in=" + str(path)],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    run = Ascot(str(path)).data.active
+                    expected_time = start - span if reverse else span
+                    np.testing.assert_allclose(
+                        run.getstate("time", state="end").to("s").v,
+                        expected_time, rtol=1e-12, atol=0)
+                    np.testing.assert_allclose(
+                        run.getstate("mileage", state="end").to("s").v,
+                        span, rtol=1e-12, atol=0)
+                    np.testing.assert_array_equal(
+                        run.getstate("endcond", state="end"), np.full(8, 4))
+
 class TestWallLoads(unittest.TestCase):
     """Wall reduction with independently known Cartesian directions."""
 
