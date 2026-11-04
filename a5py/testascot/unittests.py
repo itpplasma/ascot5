@@ -1249,6 +1249,69 @@ class TestPowerDeposition(unittest.TestCase):
                     moment.ordinate("electronpowerdep")
                     + moment.ordinate("ionpowerdep"), rtol=1e-12, atol=1e-30)
 
+class TestAdaptiveTimeLimit(unittest.TestCase):
+    """Adaptive GC steps must end at the requested physical time."""
+
+    def test_final_collision_step_respects_time_limits(self):
+        binary = Path(__file__).resolve().parents[2] / "build/ascot5_main"
+        for reverse, mileage_limit in [(False, False), (False, True),
+                                        (True, False)]:
+            with self.subTest(reverse=reverse, mileage=mileage_limit):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "input.h5"
+                    a5 = Ascot(str(path), create=True)
+                    a5.data.create_input("B_TC", bxyz=np.array([0., 0., 2.]),
+                        jacobian=np.zeros((3, 3)), rhoval=0.5, activate=True)
+                    a5.data.create_input("E_TC", exyz=np.zeros(3), activate=True)
+                    a5.data.create_input("plasma_1D", nrho=3, nion=1,
+                        anum=np.array([1]), znum=np.array([1]),
+                        mass=np.array([1.007276466621]), charge=np.array([1]),
+                        rho=np.array([0., 0.5, 2.]), edensity=np.full(3, 1e20),
+                        idensity=np.full((3, 1), 1e20),
+                        etemperature=np.full(3, 1000.),
+                        itemperature=np.full(3, 1000.), vtor=np.zeros(3),
+                        activate=True)
+                    for kind in ["wall_2D", "N0_1D", "Boozer", "MHD_STAT",
+                                 "asigma_loc"]:
+                        a5.data.create_input(kind, activate=True)
+                    marker = Marker.generate("gc", n=8, species="H1")
+                    marker["r"][:] = 6.5
+                    marker["phi"][:] = 0
+                    marker["z"][:] = 0
+                    marker["energy"][:] = 55000
+                    marker["pitch"][:] = 0.7
+                    marker["time"][:] = 0.1 if reverse else 0
+                    a5.data.create_input("gc", **marker, activate=True)
+                    from a5py.ascot5io.options import Opt
+                    options = Opt.get_default()
+                    options.update(SIM_MODE=2, ENABLE_ADAPTIVE=1,
+                        ENABLE_ORBIT_FOLLOWING=int(reverse),
+                        ENABLE_COULOMB_COLLISIONS=int(not reverse),
+                        DISABLE_ENERGY_CCOLL=1, DISABLE_GCDIFF_CCOLL=1,
+                        FIXEDSTEP_USE_USERDEFINED=1,
+                        FIXEDSTEP_USERDEFINED=0.006, REVERSE_TIME=int(reverse),
+                        ENDCOND_SIMTIMELIM=1, ENDCOND_ENERGYLIM=0,
+                        ENDCOND_WALLHIT=0, ENDCOND_RHOLIM=0,
+                        ENDCOND_MAX_MILEAGE=0.01 if mileage_limit else 1.,
+                        ENDCOND_LIM_SIMTIME=0.09 if reverse else
+                            (1. if mileage_limit else 0.01))
+                    a5.data.create_input("opt", **options, activate=True)
+                    result = subprocess.run([str(binary), "--in=" + str(path)],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    run = Ascot(str(path)).data.active
+                    expected_time = 0.09 if reverse else 0.01
+                    np.testing.assert_allclose(
+                        run.getstate("time", state="end").to("s").v,
+                        expected_time, rtol=0, atol=1e-15)
+                    np.testing.assert_allclose(
+                        run.getstate("mileage", state="end").to("s").v,
+                        0.01, rtol=0, atol=1e-15)
+                    np.testing.assert_array_equal(
+                        run.getstate("endcond", state="end"), np.full(8, 4))
+
+
 class TestMoments(unittest.TestCase):
     """Class for testing distribution moments.
     """

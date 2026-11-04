@@ -310,15 +310,15 @@ void endcond_check_gc(particle_simd_gc* p_f, particle_simd_gc* p_i,
 
             /* Check if the marker time exceeds simulation time */
             if(active_tlim) {
-                if(!sim->reverse_time && p_f->time[i] > sim->endcond_lim_simtime) {
+                if(!sim->reverse_time && p_f->time[i] >= sim->endcond_lim_simtime) {
                     p_f->endcond[i] |= endcond_tlim;
                     p_f->running[i] = 0;
                 }
-                if(sim->reverse_time && p_f->time[i] < sim->endcond_lim_simtime) {
+                if(sim->reverse_time && p_f->time[i] <= sim->endcond_lim_simtime) {
                     p_f->endcond[i] |= endcond_tlim;
                     p_f->running[i] = 0;
                 }
-                if(p_f->mileage[i] > sim->endcond_max_mileage) {
+                if(p_f->mileage[i] >= sim->endcond_max_mileage) {
                     p_f->endcond[i] |= endcond_tlim;
                     p_f->running[i] = 0;
                 }
