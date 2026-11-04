@@ -20,6 +20,42 @@ from a5py.ascot5io.coreio import fileapi
 from a5py.ascot5io.state import State
 from a5py.ascot5io.marker import Marker
 
+class TestGuidingCenterTransform(unittest.TestCase):
+    """Check native particle initialization against a uniform-field invariant."""
+
+    def test_uniform_field_momentum_order(self):
+        import ctypes
+        from a5py.ascotpy.libascot import _LIBASCOT
+
+        with tempfile.TemporaryDirectory() as directory:
+            a5 = Ascot(str(Path(directory)/"uniform.h5"), create=True)
+            a5.data.create_input("B_TC", bxyz=np.array([2.4, 0.7, 0.4]),
+                                 jacobian=np.zeros((3, 3)), rhoval=0.5,
+                                 activate=True)
+            mrk = Marker.generate("prt", 4, species="H")
+            mrk.update(r=np.full(4, 5.)*unyt.m,
+                       phi=np.array([-150., -30., 45., 120.])*unyt.deg,
+                       z=np.full(4, .1)*unyt.m,
+                       vr=np.full(4, 1e6)*unyt.m/unyt.s,
+                       vphi=np.full(4, -2e6)*unyt.m/unyt.s,
+                       vz=np.full(4, .5e6)*unyt.m/unyt.s)
+            a5.data.create_input("prt", **mrk, activate=True)
+            a5.input_init(bfield=True)
+            try:
+                values = []
+                for order in (0, 1):
+                    _LIBASCOT.gctransform_setorder(ctypes.c_int(order))
+                    a5.simulation_initmarkers()
+                    self.assertTrue(all(a5._inistate[i].err == 0 for i in range(4)))
+                    values.append(np.array([[getattr(a5._inistate[i], key)
+                        for key in ("ppar", "mu", "zeta")] for i in range(4)]))
+                np.testing.assert_allclose(values[1], values[0], rtol=2e-14, atol=0)
+            finally:
+                _LIBASCOT.gctransform_setorder(ctypes.c_int(1))
+                a5.simulation_free(markers=True)
+                a5.input_free()
+
+
 class TestAscot5IO(unittest.TestCase):
     """Class to test `ascot5io` module.
     """
