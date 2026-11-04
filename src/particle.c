@@ -1394,6 +1394,8 @@ void particle_copy_fo(particle_simd_fo* p1, int i, particle_simd_fo* p2, int j) 
         p2->B_z_dr[j]     = p1->B_z_dr[i];
         p2->B_z_dphi[j]   = p1->B_z_dphi[i];
         p2->B_z_dz[j]     = p1->B_z_dz[i];
+        p2->err[j]        = p1->err[i];
+        p2->index[j]      = p1->index[i];
 }
 
 /**
@@ -1443,6 +1445,8 @@ void particle_copy_gc(particle_simd_gc* p1, int i, particle_simd_gc* p2, int j) 
     p2->B_z_dr[j]     = p1->B_z_dr[i];
     p2->B_z_dphi[j]   = p1->B_z_dphi[i];
     p2->B_z_dz[j]     = p1->B_z_dz[i];
+    p2->err[j]        = p1->err[i];
+    p2->index[j]      = p1->index[i];
 }
 
 /**
@@ -1487,6 +1491,8 @@ void particle_copy_ml(particle_simd_ml* p1, int i, particle_simd_ml* p2,
     p2->B_z_dr[j]     = p1->B_z_dr[i];
     p2->B_z_dphi[j]   = p1->B_z_dphi[i];
     p2->B_z_dz[j]     = p1->B_z_dz[i];
+    p2->err[j]        = p1->err[i];
+    p2->index[j]      = p1->index[i];
 }
 
 /**
