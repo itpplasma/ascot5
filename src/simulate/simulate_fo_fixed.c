@@ -103,6 +103,21 @@ void simulate_fo_fixed(particle_queue* pq, sim_data* sim, int mrk_array_size) {
         /* Store marker states */
         GPU_PARALLEL_LOOP_ALL_LEVELS
         for(int i = 0; i < p.n_mrk; i++) {
+            if(p.running[i] && (sim->endcond_active & endcond_tlim)) {
+                real time_left = sim->reverse_time
+                    ? p.time[i] - sim->endcond_lim_simtime
+                    : sim->endcond_lim_simtime - p.time[i];
+                real remaining = fmin(time_left,
+                    sim->endcond_max_mileage - p.mileage[i]);
+                if(remaining <= 0) {
+                    p.endcond[i] |= endcond_tlim;
+                    p.running[i] = 0;
+                }
+                else {
+                    /* End the final fixed step at the limit. */
+                    hin[i] = fmin(hin[i], remaining);
+                }
+            }
             particle_copy_fo(&p, i, &p0, i);
         }
         /*************************** Physics **********************************/
