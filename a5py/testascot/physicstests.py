@@ -424,8 +424,10 @@ class PhysTest():
             "FIXEDSTEP_USERDEFINED" : 1e-11, "ENDCOND_SIMTIMELIM" : 1,
             "ENDCOND_LIM_SIMTIME" : 5e-6, "ENABLE_ORBIT_FOLLOWING" : 1,
             "ENABLE_ORBITWRITE" : 1, "ORBITWRITE_MODE" : 1,
-            "ORBITWRITE_INTERVAL" : 1e-10, "ORBITWRITE_NPOINT" : 50002
+            "ORBITWRITE_INTERVAL" : 1e-11, "ORBITWRITE_NPOINT" : 500002
         })
+        # Every step is written: a 1e-10 s cadence aliases the ~1.7e-10 s
+        # gyration of these 10 MeV leptons.
         init("opt", **opt, desc=PhysTest.tag_orbfol_go)
         opt.update({
             "SIM_MODE" : 2, "FIXEDSTEP_USERDEFINED" : 1e-12,
@@ -542,6 +544,21 @@ class PhysTest():
             print(msg)
             return False
 
+        def fails_periodic(t, q, z, eps, qnt, otype, mode):
+            """Check the drift of a quantity averaged over whole bounce or
+            transit periods; within a period the adiabatic moment and the
+            integrator's bounded O(dt^2) error oscillate.
+            """
+            err = _periodfit(t, (q - q[0]) / q[0], z)
+            msg = "Rate of change in %6s (%s/%11s): %e Tolerance: %e" \
+                % (qnt, otype, mode, err, eps)
+            if not np.abs(err) <= eps:
+                msg += " (FAILED)"
+                print(msg)
+                return True
+            print(msg)
+            return False
+
         # Numerical values
         self.ascot.input_init(run=run_go.get_qid(), bfield=True)
         tgo1, ego1, mugo1, pgo1, rgo1, zgo1 = run_go.getorbit(
@@ -590,14 +607,18 @@ class PhysTest():
         if fails(tgcf2, egcf2,  5e-6, "energy", otype2, simmode2):passed = False
         if fails(tgca1, egca1,  5e-6, "energy", otype1, simmode3):passed = False
         if fails(tgca2, egca2,  5e-6, "energy", otype2, simmode3):passed = False
-        if fails(tgo1,  mugo1,   2e2, "mu",     otype1, simmode1):passed = False
-        if fails(tgo2,  mugo2,  2e-1, "mu",     otype2, simmode1):passed = False
+        if fails_periodic(tgo1, mugo1, zgo1, 2e2, "mu", otype1, simmode1):
+            passed = False
+        if fails_periodic(tgo2, mugo2, zgo2, 2e-1, "mu", otype2, simmode1):
+            passed = False
         if fails(tgcf1, mugcf1, 1e-9, "mu",     otype1, simmode2):passed = False
         if fails(tgcf2, mugcf2, 1e-9, "mu",     otype2, simmode2):passed = False
         if fails(tgca1, mugca1, 1e-9, "mu",     otype1, simmode3):passed = False
         if fails(tgca2, mugca2, 1e-9, "mu",     otype2, simmode3):passed = False
-        if fails(tgo1,  pgo1,   5e-3, "Ptor",   otype1, simmode1):passed = False
-        if fails(tgo2,  pgo2,   5e-5, "Ptor",   otype2, simmode1):passed = False
+        if fails_periodic(tgo1, pgo1, zgo1, 5e-3, "Ptor", otype1, simmode1):
+            passed = False
+        if fails_periodic(tgo2, pgo2, zgo2, 5e-5, "Ptor", otype2, simmode1):
+            passed = False
         if fails(tgcf1, pgcf1,  5e-2, "Ptor",   otype1, simmode2):passed = False
         if fails(tgcf2, pgcf2,  5e-2, "Ptor",   otype2, simmode2):passed = False
         if fails(tgca1, pgca1,  5e-2, "Ptor",   otype1, simmode3):passed = False
@@ -2406,6 +2427,32 @@ class PhysTest():
             ["./../../build/ascot5_main", "--in=testascot.h5", "--d="+test],
             stdout=subprocess.DEVNULL)
         self.ascot = Ascot(self.ascot.file_getpath())
+
+def _periodfit(t, y, z):
+    """Slope of a linear fit to y averaged over each bounce/transit period.
+
+    Periods run between upward midplane crossings of z, gyro-averaged over
+    1e-8 s and detected with a hysteresis of 1 % of the vertical extent.
+    Returns NaN, which fails the check, with fewer than two whole periods.
+    """
+    t = np.asarray(getattr(t, "v", t), dtype=float)
+    y = np.asarray(getattr(y, "v", y), dtype=float)
+    z = np.asarray(getattr(z, "v", z), dtype=float)
+    n = max(1, int(round(1e-8 / np.median(np.diff(t)))))
+    zs = np.convolve(z, np.ones(n) / n, mode="same")
+    band = 0.01 * np.ptp(zs)
+    up, armed = [], False
+    for i in range(n, len(zs) - n):
+        if zs[i] < -band:
+            armed = True
+        elif armed and zs[i] >= 0:
+            up.append(i)
+            armed = False
+    if len(up) < 3:
+        return np.nan
+    tm = [t[a:b].mean() for a, b in zip(up[:-1], up[1:])]
+    ym = [y[a:b].mean() for a, b in zip(up[:-1], up[1:])]
+    return np.polyfit(tm, ym, 1)[0]
 
 def _linfit(x, y):
     """Calculate linear fit and return the slope.
