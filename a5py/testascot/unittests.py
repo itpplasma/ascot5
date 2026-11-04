@@ -630,6 +630,88 @@ class TestVmecField(unittest.TestCase):
                         self.woutfilename.format("n")],
                        stdout=subprocess.DEVNULL)
 
+class TestWallEndState(unittest.TestCase):
+    """Wall records must use the intersection geometry and elapsed time."""
+
+    def test_axisymmetric_hit_and_elapsed_time(self):
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        sim = ascot2py.sim_data()
+        sim.endcond_active = ascot2py.endcond_wall
+        sim.wall_data.type = ascot2py.wall_type_2D
+        r = (ctypes.c_double * 4)(0, 1, 1, 0)
+        z = (ctypes.c_double * 4)(-2, -2, 2, 2)
+        flag = (ctypes.c_int * 4)(1, 1, 1, 1)
+        self.assertEqual(ascot2py.wall_2d_init(
+            ctypes.byref(sim.wall_data.w2d), 4, r, z, flag), 0)
+        r0, r1 = np.hypot(.5, -.25), np.hypot(1.5, .75)
+        w = (1-r0)/(r1-r0)
+        phi = np.arctan2(-.25, .5) + w*(np.arctan2(.75, 1.5)-np.arctan2(-.25, .5))
+        try:
+            self.check_hit(sim, [np.cos(phi), np.sin(phi), 0], w)
+        finally:
+            ascot2py.wall_2d_free(ctypes.byref(sim.wall_data.w2d))
+
+    def test_cartesian_hit_and_elapsed_time(self):
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        sim = ascot2py.sim_data()
+        sim.endcond_active = ascot2py.endcond_wall
+        sim.wall_data.type = ascot2py.wall_type_3D
+        x = (ctypes.c_double * 3)(1, 1, 1)
+        y = (ctypes.c_double * 3)(-2, 2, 0)
+        z = (ctypes.c_double * 3)(-2, -2, 2)
+        flag = (ctypes.c_int * 1)(1)
+        self.assertEqual(ascot2py.wall_3d_init(
+            ctypes.byref(sim.wall_data.w3d), 1, x, y, z, flag), 0)
+        try:
+            self.check_hit(sim, [1, .25, 0], .5)
+        finally:
+            ascot2py.wall_3d_free(ctypes.byref(sim.wall_data.w3d))
+
+    def check_hit(self, sim, expected, w):
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        for kind in ["fo", "gc"]:
+            for reverse in [False, True]:
+                with self.subTest(kind=kind, reverse=reverse):
+                    states = [getattr(ascot2py, "particle_simd_"+kind)()
+                              for _ in range(2)]
+                    for p in states:
+                        getattr(ascot2py, "particle_allocate_"+kind)(
+                            ctypes.byref(p), 1)
+                        for name, _ in p._fields_:
+                            if name != "n_mrk":
+                                getattr(p, name)[0] = 0
+                        p.running[0] = 1
+                    initial, final = states
+                    try:
+                        for p, xx, yy in [(initial, .5, -.25), (final, 1.5, .75)]:
+                            p.r[0], p.phi[0] = np.hypot(xx, yy), np.arctan2(yy, xx)
+                        initial.time[0], final.time[0] = (4, 2) if reverse else (2, 4)
+                        initial.mileage[0], final.mileage[0] = 10, 12
+                        getattr(ascot2py, "endcond_check_"+kind)(
+                            ctypes.byref(final), ctypes.byref(initial), ctypes.byref(sim))
+                        self.assertGreater(final.walltile[0], 0)
+                        self.assertEqual(final.endcond[0], ascot2py.endcond_wall)
+                        self.assertEqual(final.running[0], 0)
+                        np.testing.assert_allclose(
+                            [final.r[0]*np.cos(final.phi[0]),
+                             final.r[0]*np.sin(final.phi[0]), final.z[0]],
+                            expected, rtol=0, atol=1e-14)
+                        expected_time = 4-2*w if reverse else 2+2*w
+                        self.assertAlmostEqual(final.time[0], expected_time, places=14)
+                        self.assertAlmostEqual(final.mileage[0], 10+2*w, places=14)
+                    finally:
+                        for p in states:
+                            for name, _ in p._fields_:
+                                if name != "n_mrk":
+                                    ascot2py.libascot_deallocate(getattr(p, name))
+
+
 class TestAscot(unittest.TestCase):
     """Class for testing :class:`Ascot` object.
     """

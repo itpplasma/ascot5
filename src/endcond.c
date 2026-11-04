@@ -136,9 +136,22 @@ void endcond_check_fo(particle_simd_fo* p_f, particle_simd_fo* p_i,
                     p_f->r[i], p_f->phi[i], p_f->z[i], &sim->wall_data, &w_coll);
                 if(tile > 0) {
                     real w = w_coll;
+                    real x = (1-w)*p_i->r[i]*cos(p_i->phi[i])
+                             + w*p_f->r[i]*cos(p_f->phi[i]);
+                    real y = (1-w)*p_i->r[i]*sin(p_i->phi[i])
+                             + w*p_f->r[i]*sin(p_f->phi[i]);
+                    real phi = atan2(y, x) - p_i->phi[i];
                     p_f->time[i] = p_i->time[i] + w*(p_f->time[i] - p_i->time[i]);
-                    p_f->r[i]    = p_i->r[i]    + w*(p_f->r[i] - p_i->r[i]);
-                    p_f->phi[i]  = p_i->phi[i]  + w*(p_f->phi[i] - p_i->phi[i]);
+                    p_f->mileage[i] = p_i->mileage[i]
+                                     + w*(p_f->mileage[i] - p_i->mileage[i]);
+                    if(sim->wall_data.type == wall_type_3D) {
+                        p_f->r[i] = hypot(x, y);
+                        p_f->phi[i] = p_i->phi[i] + atan2(sin(phi), cos(phi));
+                    }
+                    else {
+                        p_f->r[i] = p_i->r[i] + w*(p_f->r[i] - p_i->r[i]);
+                        p_f->phi[i] = p_i->phi[i] + w*(p_f->phi[i] - p_i->phi[i]);
+                    }
                     p_f->z[i]    = p_i->z[i]    + w*(p_f->z[i] - p_i->z[i]);
 
                     p_f->walltile[i] = tile;
@@ -332,6 +345,24 @@ void endcond_check_gc(particle_simd_gc* p_f, particle_simd_gc* p_i,
                                          p_f->r[i], p_f->phi[i], p_f->z[i],
                                          &sim->wall_data, &w_coll);
                 if(tile > 0) {
+                    real w = w_coll;
+                    real x = (1-w)*p_i->r[i]*cos(p_i->phi[i])
+                             + w*p_f->r[i]*cos(p_f->phi[i]);
+                    real y = (1-w)*p_i->r[i]*sin(p_i->phi[i])
+                             + w*p_f->r[i]*sin(p_f->phi[i]);
+                    real phi = atan2(y, x) - p_i->phi[i];
+                    p_f->time[i] = p_i->time[i] + w*(p_f->time[i] - p_i->time[i]);
+                    p_f->mileage[i] = p_i->mileage[i]
+                                     + w*(p_f->mileage[i] - p_i->mileage[i]);
+                    if(sim->wall_data.type == wall_type_3D) {
+                        p_f->r[i] = hypot(x, y);
+                        p_f->phi[i] = p_i->phi[i] + atan2(sin(phi), cos(phi));
+                    }
+                    else {
+                        p_f->r[i] = p_i->r[i] + w*(p_f->r[i] - p_i->r[i]);
+                        p_f->phi[i] = p_i->phi[i] + w*(p_f->phi[i] - p_i->phi[i]);
+                    }
+                    p_f->z[i] = p_i->z[i] + w*(p_f->z[i] - p_i->z[i]);
                     p_f->walltile[i] = tile;
                     p_f->endcond[i] |= endcond_wall;
                     p_f->running[i] = 0;
