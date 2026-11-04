@@ -1628,6 +1628,87 @@ class TestMoments(unittest.TestCase):
 
         a5.input_free(bfield=True)
 
+class TestWallEventEnergy(unittest.TestCase):
+    """Wall momentum and field caches describe the localized impact."""
+
+    def test_localized_fo_and_gc_energy(self):
+        import ctypes as ct
+        from a5py.ascotpy import ascot2py as a5
+
+        def marker(kind):
+            p = getattr(a5, "particle_simd_" + kind)()
+            buffers = []
+            for name, typ, *_ in p._fields_:
+                if isinstance(typ, type) and issubclass(typ, ct._Pointer):
+                    buf = (typ._type_ * 1)()
+                    setattr(p, name, buf)
+                    buffers.append(buf)
+            p.n_mrk = 1
+            p.running[0] = 1
+            p.mass[0] = 1.67262192369e-27
+            p.charge[0] = 1.602176634e-19
+            p.weight[0] = 7.
+            return p, buffers
+
+        sim = a5.sim_data()
+        sim.endcond_active = a5.endcond_wall
+        sim.B_data.type = a5.B_field_type_TC
+        self.assertEqual(a5.B_TC_init(ct.byref(sim.B_data.BTC), 1., 0., 0., .7,
+            (ct.c_double * 3)(1., 0., 0.), (ct.c_double * 9)()), 0)
+        sim.wall_data.type = a5.wall_type_3D
+        coords = [np.array(v) for v in [(1., 1., 1.), (-2., 2., 0.),
+                                        (-2., -2., 2.)]]
+        flags = np.zeros(1, dtype=np.int32)
+        ptr = ct.POINTER(ct.c_double)
+        self.assertEqual(a5.wall_3d_init(ct.byref(sim.wall_data.w3d), 1,
+            *(v.ctypes.data_as(ptr) for v in coords),
+            flags.ctypes.data_as(ct.POINTER(ct.c_int))), 0)
+        try:
+            for kind in ["fo", "gc"]:
+                for turns in [0, 7]:
+                    start, keep0 = marker(kind)
+                    end, keep1 = marker(kind)
+                    for p, t in [(start, 0.), (end, 1.)]:
+                        phi = np.arctan2(.5, .5 + t) + 2*np.pi*turns
+                        p.r[0] = np.hypot(.5 + t, .5)
+                        p.phi[0] = phi
+                        p.time[0] = 1 + 2*t
+                        p.mileage[0] = 10 + 2*t
+                        p.theta[0] = 2*t
+                        p.B_r[0] = np.cos(phi)
+                        p.B_phi[0] = -np.sin(phi)
+                        if kind == "fo":
+                            p.p_z[0] = 1e-22
+                            p.p_r[0] = (1+t)*1e-21*np.cos(phi)
+                            p.p_phi[0] = -(1+t)*1e-21*np.sin(phi)
+                        else:
+                            p.ppar[0] = (1+t)*1e-21
+                            p.mu[0] = (1+2*t)*1e-17
+                            p.zeta[0] = t
+                    getattr(a5, "endcond_check_" + kind)(
+                        ct.byref(end), ct.byref(start), ct.byref(sim))
+                    np.testing.assert_allclose([end.B_r[0], end.B_phi[0]],
+                        [np.cos(end.phi[0]), -np.sin(end.phi[0])], atol=1e-14)
+                    if kind == "fo":
+                        momentum = [end.p_r[0]*np.cos(end.phi[0])
+                                    - end.p_phi[0]*np.sin(end.phi[0]),
+                                    end.p_r[0]*np.sin(end.phi[0])
+                                    + end.p_phi[0]*np.cos(end.phi[0])]
+                        np.testing.assert_allclose(momentum, [1.5e-21, 0.],
+                                                   atol=1e-34, rtol=1e-13)
+                    else:
+                        self.assertAlmostEqual(end.ppar[0]/1e-21, 1.5, places=13)
+                        self.assertAlmostEqual(end.mu[0]/1e-17, 2., places=13)
+                    exported = a5.particle_state()
+                    getattr(a5, "particle_" + kind + "_to_state")(
+                        ct.byref(end), 0, ct.byref(exported), ct.byref(sim.B_data))
+                    self.assertAlmostEqual(exported.ppar/1e-21, 1.5, places=13)
+                    if kind == "gc":
+                        self.assertAlmostEqual(exported.mu/1e-17, 2., places=13)
+        finally:
+            a5.wall_3d_free(ct.byref(sim.wall_data.w3d))
+
+
 class TestPlotting(unittest.TestCase):
 
     def tearDown(self):
