@@ -20,6 +20,42 @@ from a5py.ascot5io.coreio import fileapi
 from a5py.ascot5io.state import State
 from a5py.ascot5io.marker import Marker
 
+class TestGuidingCenterTransform(unittest.TestCase):
+    """Check native particle initialization against a uniform-field invariant."""
+
+    def test_uniform_field_momentum_order(self):
+        import ctypes
+        from a5py.ascotpy.libascot import _LIBASCOT
+
+        with tempfile.TemporaryDirectory() as directory:
+            a5 = Ascot(str(Path(directory)/"uniform.h5"), create=True)
+            a5.data.create_input("B_TC", bxyz=np.array([2.4, 0.7, 0.4]),
+                                 jacobian=np.zeros((3, 3)), rhoval=0.5,
+                                 activate=True)
+            mrk = Marker.generate("prt", 4, species="H")
+            mrk.update(r=np.full(4, 5.)*unyt.m,
+                       phi=np.array([-150., -30., 45., 120.])*unyt.deg,
+                       z=np.full(4, .1)*unyt.m,
+                       vr=np.full(4, 1e6)*unyt.m/unyt.s,
+                       vphi=np.full(4, -2e6)*unyt.m/unyt.s,
+                       vz=np.full(4, .5e6)*unyt.m/unyt.s)
+            a5.data.create_input("prt", **mrk, activate=True)
+            a5.input_init(bfield=True)
+            try:
+                values = []
+                for order in (0, 1):
+                    _LIBASCOT.gctransform_setorder(ctypes.c_int(order))
+                    a5.simulation_initmarkers()
+                    self.assertTrue(all(a5._inistate[i].err == 0 for i in range(4)))
+                    values.append(np.array([[getattr(a5._inistate[i], key)
+                        for key in ("ppar", "mu", "zeta")] for i in range(4)]))
+                np.testing.assert_allclose(values[1], values[0], rtol=2e-14, atol=0)
+            finally:
+                _LIBASCOT.gctransform_setorder(ctypes.c_int(1))
+                a5.simulation_free(markers=True)
+                a5.input_free()
+
+
 class TestAscot5IO(unittest.TestCase):
     """Class to test `ascot5io` module.
     """
@@ -288,6 +324,30 @@ class TestAscot5IO(unittest.TestCase):
         with h5py.File(self.testfilename, "r") as h5:
             self.assertFalse("results" in h5,
                             "Results not removed in HDF5.")
+
+    def test_wall_start_contact(self):
+        """Accelerated and full searches include the same segment endpoints."""
+        import ctypes
+        from a5py.ascotpy import ascot2py as a5
+        x = np.array([1., 1., 1.])
+        y = np.array([-1., 2., -1.])
+        z = np.array([-1., -1., 2.])
+        flag = np.zeros(1, dtype=np.int32)
+        pointer = ctypes.POINTER(ctypes.c_double)
+        wall = a5.wall_3d_data()
+        self.assertEqual(a5.wall_3d_init(ctypes.byref(wall), 1,
+            x.ctypes.data_as(pointer), y.ctypes.data_as(pointer),
+            z.ctypes.data_as(pointer),
+            flag.ctypes.data_as(ctypes.POINTER(ctypes.c_int))), 0)
+        try:
+            for search in [a5.wall_3d_hit_wall, a5.wall_3d_hit_wall_full]:
+                fraction = ctypes.c_double(-1.)
+                tile = search(1., 0., 0., 1.5, 0., 0., ctypes.byref(wall),
+                              ctypes.byref(fraction))
+                self.assertEqual(tile, 1)
+                self.assertEqual(fraction.value, 0.)
+        finally:
+            a5.wall_3d_free(ctypes.byref(wall))
 
     def test_endcond(self):
         """Test end conditions are parsed properly
@@ -567,6 +627,34 @@ class TestVmecField(unittest.TestCase):
         self.assertLess(np.max(np.abs(rho**2 - expected)), 1e-4,
                         "near-axis points received exterior flux labels")
 
+    def test_lcfs_grid_envelope(self):
+        """The cylindrical grid must include LCFS extrema between samples.
+        """
+        import netCDF4
+        wout = self.writewout(-2.0)
+        a5 = Ascot(self.testfilename, create=True)
+        a5.data.create_input("vmec_sts", ncfile=wout, phimin=0, phimax=72,
+                             nphi=24, ntheta=120, nr=60, nz=60, activate=True)
+        with netCDF4.Dataset(wout) as f:
+            m, n = np.array(f["xm"][:]), np.array(f["xn"][:])
+            rc, zc = np.array(f["rmnc"][-1]), np.array(f["zmns"][-1])
+        u, v = np.meshgrid(np.linspace(0, 2*np.pi, 361),
+                           np.linspace(0, 2*np.pi/5, 37, endpoint=False))
+        u, v = u.ravel(), v.ravel()
+        phase = u[:,None]*m-v[:,None]*n
+        r, z = np.cos(phase)@rc, np.sin(phase)@zc
+        a5.input_init(bfield=True)
+        try:
+            br, bp, bz, rho = a5.input_eval(
+                r*unyt.m, v*unyt.rad, z*unyt.m, 0*unyt.s,
+                "br", "bphi", "bz", "rho")
+            for value in (br, bp, bz, rho):
+                self.assertTrue(np.isfinite(value).all(),
+                                "LCFS lies outside the field grid")
+            self.assertLess(np.max(abs(rho.v-1)), 1e-3)
+        finally:
+            a5.input_free()
+
     def test_field(self):
         """Test B and rho near and outside the LCFS against the VMEC sums
         """
@@ -629,6 +717,88 @@ class TestVmecField(unittest.TestCase):
                         self.woutfilename.format("p"),
                         self.woutfilename.format("n")],
                        stdout=subprocess.DEVNULL)
+
+class TestWallEndState(unittest.TestCase):
+    """Wall records must use the intersection geometry and elapsed time."""
+
+    def test_axisymmetric_hit_and_elapsed_time(self):
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        sim = ascot2py.sim_data()
+        sim.endcond_active = ascot2py.endcond_wall
+        sim.wall_data.type = ascot2py.wall_type_2D
+        r = (ctypes.c_double * 4)(0, 1, 1, 0)
+        z = (ctypes.c_double * 4)(-2, -2, 2, 2)
+        flag = (ctypes.c_int * 4)(1, 1, 1, 1)
+        self.assertEqual(ascot2py.wall_2d_init(
+            ctypes.byref(sim.wall_data.w2d), 4, r, z, flag), 0)
+        r0, r1 = np.hypot(.5, -.25), np.hypot(1.5, .75)
+        w = (1-r0)/(r1-r0)
+        phi = np.arctan2(-.25, .5) + w*(np.arctan2(.75, 1.5)-np.arctan2(-.25, .5))
+        try:
+            self.check_hit(sim, [np.cos(phi), np.sin(phi), 0], w)
+        finally:
+            ascot2py.wall_2d_free(ctypes.byref(sim.wall_data.w2d))
+
+    def test_cartesian_hit_and_elapsed_time(self):
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        sim = ascot2py.sim_data()
+        sim.endcond_active = ascot2py.endcond_wall
+        sim.wall_data.type = ascot2py.wall_type_3D
+        x = (ctypes.c_double * 3)(1, 1, 1)
+        y = (ctypes.c_double * 3)(-2, 2, 0)
+        z = (ctypes.c_double * 3)(-2, -2, 2)
+        flag = (ctypes.c_int * 1)(1)
+        self.assertEqual(ascot2py.wall_3d_init(
+            ctypes.byref(sim.wall_data.w3d), 1, x, y, z, flag), 0)
+        try:
+            self.check_hit(sim, [1, .25, 0], .5)
+        finally:
+            ascot2py.wall_3d_free(ctypes.byref(sim.wall_data.w3d))
+
+    def check_hit(self, sim, expected, w):
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        for kind in ["fo", "gc"]:
+            for reverse in [False, True]:
+                with self.subTest(kind=kind, reverse=reverse):
+                    states = [getattr(ascot2py, "particle_simd_"+kind)()
+                              for _ in range(2)]
+                    for p in states:
+                        getattr(ascot2py, "particle_allocate_"+kind)(
+                            ctypes.byref(p), 1)
+                        for name, _ in p._fields_:
+                            if name != "n_mrk":
+                                getattr(p, name)[0] = 0
+                        p.running[0] = 1
+                    initial, final = states
+                    try:
+                        for p, xx, yy in [(initial, .5, -.25), (final, 1.5, .75)]:
+                            p.r[0], p.phi[0] = np.hypot(xx, yy), np.arctan2(yy, xx)
+                        initial.time[0], final.time[0] = (4, 2) if reverse else (2, 4)
+                        initial.mileage[0], final.mileage[0] = 10, 12
+                        getattr(ascot2py, "endcond_check_"+kind)(
+                            ctypes.byref(final), ctypes.byref(initial), ctypes.byref(sim))
+                        self.assertGreater(final.walltile[0], 0)
+                        self.assertEqual(final.endcond[0], ascot2py.endcond_wall)
+                        self.assertEqual(final.running[0], 0)
+                        np.testing.assert_allclose(
+                            [final.r[0]*np.cos(final.phi[0]),
+                             final.r[0]*np.sin(final.phi[0]), final.z[0]],
+                            expected, rtol=0, atol=1e-14)
+                        expected_time = 4-2*w if reverse else 2+2*w
+                        self.assertAlmostEqual(final.time[0], expected_time, places=14)
+                        self.assertAlmostEqual(final.mileage[0], 10+2*w, places=14)
+                    finally:
+                        for p in states:
+                            for name, _ in p._fields_:
+                                if name != "n_mrk":
+                                    ascot2py.libascot_deallocate(getattr(p, name))
+
 
 class TestAscot(unittest.TestCase):
     """Class for testing :class:`Ascot` object.
@@ -727,6 +897,61 @@ class TestAscot(unittest.TestCase):
                 if name != "n_mrk":
                     ascot2py.libascot_deallocate(getattr(p, name))
             a5.simulation_free()
+
+    def test_gc_collision_repeated_pitch_reflection(self):
+        """Large finite kicks must retain nonnegative magnetic moment."""
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        a5 = Ascot("unittest.h5")
+        original = a5.data.bfield.active
+        a5.data.active.efield.activate()
+        a5.data.create_input("B_TC", bxyz=np.array([0., 0., 2.]),
+                            jacobian=np.zeros((3, 3)), rhoval=0.5,
+                            activate=True)
+        marker = Marker.generate("gc", n=1, species="alpha")
+        marker["r"][:] = 7.6
+        marker["phi"][:] = 0
+        marker["energy"][:] = 3.5e6
+        marker["pitch"][:] = 0.3
+        p = ascot2py.particle_simd_gc()
+        ascot2py.particle_allocate_gc(ctypes.byref(p), 1)
+        data = type(a5._sim.mccc_data)()
+        library = ascot2py._libraries["libascot.so"]
+        initialize = library.mccc_init
+        initialize.argtypes = [ctypes.POINTER(type(data)), ctypes.c_int,
+                               ctypes.c_int, ctypes.c_int]
+        initialize(ctypes.byref(data), 0, 1, 0)
+        kernel = library.mccc_gc_euler
+        kernel.argtypes = [ctypes.POINTER(ascot2py.particle_simd_gc),
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.POINTER(ascot2py.B_field_data),
+            ctypes.POINTER(type(a5._sim.plasma_data)),
+            ctypes.POINTER(type(data)), ctypes.POINTER(ctypes.c_double)]
+        try:
+            a5.simulation_initinputs()
+            a5.simulation_initmarkers(**marker)
+            for noise in [-1e4, 1e4]:
+                with self.subTest(noise=noise):
+                    err = ascot2py.particle_state_to_gc(
+                        ctypes.byref(a5._inistate[0]), 0,
+                        ctypes.byref(p), 0, ctypes.byref(a5._sim.B_data))
+                    self.assertEqual(err, 0)
+                    h = (ctypes.c_double * 1)(0.01)
+                    rnd = (ctypes.c_double * 5)(0, 0, 0, 0, noise)
+                    kernel(ctypes.byref(p), h,
+                        ctypes.byref(a5._sim.B_data),
+                        ctypes.byref(a5._sim.plasma_data),
+                        ctypes.byref(data), rnd)
+                    self.assertEqual(p.err[0], 0)
+                    self.assertTrue(np.isfinite([p.ppar[0], p.mu[0]]).all())
+                    self.assertGreaterEqual(p.mu[0], 0)
+        finally:
+            for name, _ in p._fields_:
+                if name != "n_mrk":
+                    ascot2py.libascot_deallocate(getattr(p, name))
+            a5.simulation_free()
+            original.activate()
 
     def test_gc_collision_field_cache(self):
         """Collisions must cache the field at the stored cumulative angle."""
@@ -980,6 +1205,24 @@ class TestAscot(unittest.TestCase):
                 AscotInitException,
                 msg="Trying to run without input should cause an error"):
             a5.simulation_run(printsummary=False)
+
+    def test_eval_many_quantities(self):
+        """Unit conversion must preserve all requested field quantities."""
+        a5 = Ascot("unittest.h5")
+        quantities = ["br", "bphi", "bz", "brdr", "brdphi", "brdz",
+                      "bphidr", "bphidphi", "bphidz", "bzdr", "bzdphi",
+                      "bzdz", "rho"] * 4
+        point = (6.2 * unyt.m, 0 * unyt.deg, 0 * unyt.m, 0 * unyt.s)
+        a5.input_init(bfield=True)
+        try:
+            actual = a5.input_eval(*point, *quantities)
+            self.assertEqual(len(actual), len(quantities))
+            for name, value in zip(quantities, actual):
+                expected = a5.input_eval(*point, name)
+                self.assertEqual(value.units, expected.units)
+                np.testing.assert_array_equal(value.v, expected.v)
+        finally:
+            a5.input_free()
 
     def test_eval(self):
         """Test :class:`Ascotpy` evaluation routines.
@@ -1310,6 +1553,40 @@ class TestAdaptiveTimeLimit(unittest.TestCase):
                         0.01, rtol=0, atol=1e-15)
                     np.testing.assert_array_equal(
                         run.getstate("endcond", state="end"), np.full(8, 4))
+
+class TestWallLoads(unittest.TestCase):
+    """Wall reduction with independently known Cartesian directions."""
+
+    def test_incidence_keeps_marker_angle_when_sorting_tiles(self):
+        from a5py.routines.runmixin import RunMixin
+
+        class Wall:
+            def area(self, normal=False):
+                return (np.ones(2)*unyt.m**2,
+                        np.array([[1., 0.], [0., 1.], [0., 0.]]))
+
+        class Run(RunMixin):
+            wall = Wall()
+            _endstate = True
+
+            def getstate(self, *args, **kwargs):
+                # Tile order deliberately opposes marker order. Each momentum
+                # points normally into its own tile in Cartesian coordinates.
+                return (np.array([2, 1]), np.array([2., 3.])*unyt.J,
+                        np.array([5., 7.])/unyt.s,
+                        np.ones(2)*unyt.kg*unyt.m/unyt.s,
+                        np.zeros(2)*unyt.kg*unyt.m/unyt.s,
+                        np.zeros(2)*unyt.kg*unyt.m/unyt.s,
+                        np.ones(2)*unyt.kg*unyt.m/unyt.s,
+                        np.array([np.pi/2, 0.])*unyt.rad)
+
+        for weighted in [True, False]:
+            ids, area, energy, particles, angle = Run().getwall_loads(
+                weights=weighted)
+            np.testing.assert_array_equal(ids, [1, 2])
+            np.testing.assert_allclose(angle, [0., 0.], atol=1e-12)
+            np.testing.assert_allclose(energy, [21., 10.] if weighted else [3., 2.])
+            np.testing.assert_allclose(particles, [7., 5.] if weighted else [1., 1.])
 
 
 class TestMoments(unittest.TestCase):

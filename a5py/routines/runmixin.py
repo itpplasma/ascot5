@@ -597,6 +597,7 @@ class RunMixin(DistMixin):
         energy = energy[idx]
         weight = weight[idx]
         punit  = punit[:,idx].v
+        phi    = phi[idx]
         idx = np.append(np.argwhere(ids[1:] - ids[:-1]).ravel(), ids.size-1)
 
         # Convert unit vectors to cartesian basis
