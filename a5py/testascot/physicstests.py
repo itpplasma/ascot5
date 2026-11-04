@@ -546,7 +546,8 @@ class PhysTest():
 
         def fails_periodic(t, q, z, eps, qnt, otype, mode):
             """Check the drift of a quantity averaged over whole bounce or
-            transit periods; adiabatic invariants oscillate within a period.
+            transit periods; within a period the adiabatic moment and the
+            integrator's bounded O(dt^2) error oscillate.
             """
             err = _periodfit(t, (q - q[0]) / q[0], z)
             msg = "Rate of change in %6s (%s/%11s): %e Tolerance: %e" \
@@ -614,8 +615,10 @@ class PhysTest():
         if fails(tgcf2, mugcf2, 1e-9, "mu",     otype2, simmode2):passed = False
         if fails(tgca1, mugca1, 1e-9, "mu",     otype1, simmode3):passed = False
         if fails(tgca2, mugca2, 1e-9, "mu",     otype2, simmode3):passed = False
-        if fails(tgo1,  pgo1,   5e-3, "Ptor",   otype1, simmode1):passed = False
-        if fails(tgo2,  pgo2,   5e-5, "Ptor",   otype2, simmode1):passed = False
+        if fails_periodic(tgo1, pgo1, zgo1, 5e-3, "Ptor", otype1, simmode1):
+            passed = False
+        if fails_periodic(tgo2, pgo2, zgo2, 5e-5, "Ptor", otype2, simmode1):
+            passed = False
         if fails(tgcf1, pgcf1,  5e-2, "Ptor",   otype1, simmode2):passed = False
         if fails(tgcf2, pgcf2,  5e-2, "Ptor",   otype2, simmode2):passed = False
         if fails(tgca1, pgca1,  5e-2, "Ptor",   otype1, simmode3):passed = False
