@@ -77,9 +77,11 @@ void mccc_fo_euler(particle_simd_fo* p, real* h, plasma_data* pdata,
             }
 
             /* Coulomb logarithm */
-            real clogab[MAX_SPECIES];
+            real clogab[MAX_SPECIES], dclogab[MAX_SPECIES];
             mccc_coefs_clog(clogab, p->mass[i], p->charge[i], vin,
                             n_species, mb, qb, nb, Tb);
+            mccc_coefs_dclog(dclogab, p->mass[i], p->charge[i], vin,
+                             n_species, mb, qb, Tb);
 
             /* Evaluate collision coefficients and sum them for each *
              * species                                               */
@@ -93,8 +95,11 @@ void mccc_fo_euler(particle_simd_fo* p, real* h, plasma_data* pdata,
 
                 F     += mccc_coefs_F(p->mass[i], p->charge[i], mb[j], qb[j],
                                       nb[j], vb, clogab[j], mufun[0]);
-                Dpara += mccc_coefs_Dpara(p->mass[i], p->charge[i], vin, qb[j],
-                                          nb[j], vb, clogab[j], mufun[0]);
+                real Dparab = mccc_coefs_Dpara(p->mass[i], p->charge[i], vin,
+                                               qb[j], nb[j], vb, clogab[j],
+                                               mufun[0]);
+                F += Dparab*dclogab[j]/clogab[j];
+                Dpara += Dparab;
                 Dperp += mccc_coefs_Dperp(p->mass[i], p->charge[i], vin, qb[j],
                                           nb[j], vb, clogab[j], mufun[1]);
             }

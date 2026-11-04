@@ -81,9 +81,11 @@ void mccc_gc_milstein(particle_simd_gc* p, real* hin, real* acc, real* collfreq,
             }
 
             /* Coulomb logarithm */
-            real clogab[MAX_SPECIES];
+            real clogab[MAX_SPECIES], dclogab[MAX_SPECIES];
             mccc_coefs_clog(clogab, p->mass[i], p->charge[i], vin,
                             n_species, mb, qb, nb, Tb);
+            mccc_coefs_dclog(dclogab, p->mass[i], p->charge[i], vin,
+                             n_species, mb, qb, Tb);
 
             /* Evaluate collision coefficients and sum them for each *
              * species                                               */
@@ -109,10 +111,12 @@ void mccc_gc_milstein(particle_simd_gc* p, real* hin, real* acc, real* collfreq,
                 real dDparab = mccc_coefs_dDpara(p->mass[i], p->charge[i], vin,
                                                  qb[j], nb[j], vb, clogab[j],
                                                  mufun[0], mufun[2]);
+                dDparab += Dparab*dclogab[j]/clogab[j];
 
                 K      += mccc_coefs_K(vin, Dparab, dDparab, Qb);
                 dQ     += mccc_coefs_dQ(p->mass[i], p->charge[i], mb[j],
                                         qb[j], nb[j], vb, clogab[j], mufun[2]);
+                dQ += Qb*dclogab[j]/clogab[j];
                 Dpara  += Dparab;
                 dDpara += dDparab;
                 nu     += mccc_coefs_nu(vin, Dperpb);
