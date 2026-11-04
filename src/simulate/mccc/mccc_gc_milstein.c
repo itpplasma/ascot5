@@ -158,8 +158,9 @@ void mccc_gc_milstein(particle_simd_gc* p, real* hin, real* acc, real* collfreq,
             }
 
             if(fabs(xiout) > 1){
-                xiout = ( (xiout > 0) - (xiout < 0) )
-                        * ( 2 - fabs( xiout ) );
+                /* A Gaussian kick may cross more than one boundary. */
+                xiout = copysign(1.0, xiout)
+                    * (1 - fabs(fmod(fabs(xiout) + 1, 4) - 2));
             }
 
             /* Compute error estimates for drift and diffusion limits */
