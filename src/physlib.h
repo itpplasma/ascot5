@@ -196,7 +196,7 @@
 * - \f$B\f$ is magnetic field norm [T]
 */
 #define physlib_gc_p(m, mu, ppar, B) ( \
-        m * CONST_C * sqrt( pow( physlib_gamma_ppar(m, mu, ppar, B), 2) - 1 ) )
+        hypot(ppar, sqrt(2 * m * mu * B)) )
 
 /**
 * @brief Evaluate guiding center pitch from parallel momentum and magnetic
