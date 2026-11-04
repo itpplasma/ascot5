@@ -22,6 +22,26 @@ int main(void) {
 
     int i;
 
+    /* A uniform Cartesian field has a zero Cartesian Jacobian at every angle. */
+    for(i = 0; i < 12; i++) {
+        real phi = -3.0 + 0.5*i;
+        real c = cos(phi), s = sin(phi);
+        real br = 2.4*c + 0.7*s;
+        real bp = -2.4*s + 0.7*c;
+        real cylindrical[12] = {br, 0, bp, 0, bp, 0, -br, 0,
+                                0.4, 0, 0, 0};
+        real cartesian[12];
+        math_jac_rpz2xyz(cylindrical, cartesian, 0.7 + i, phi);
+        real expected[12] = {2.4, 0, 0, 0, 0.7, 0, 0, 0, 0.4, 0, 0, 0};
+        for(int j = 0; j < 12; j++) {
+            if(fabs(cartesian[j] - expected[j]) > 2e-14) {
+                printf("Uniform-field Jacobian failed: angle %g, component %d: %g\n",
+                       phi, j, cartesian[j]);
+                return 1;
+            }
+        }
+    }
+
     double accurate=(10.0-(sin(100.0)+10.0*cos(100.0))*exp(-10.0))/101.0;
     double approx=math_simpson(myfunc,0.0,10.0,1.e-10);
 

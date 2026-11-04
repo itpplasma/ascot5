@@ -67,8 +67,8 @@ void math_jac_rpz2xyz(real* rpz, real* xyz, real r, real phi) {
     temp[2] = rpz[3] * s + rpz[7] * c;
 
     // Step 2: Gradient
-    xyz[5] = temp[0] * c - temp[1] * s / r + (rpz[0]*c - rpz[4]*s) * s / r;
-    xyz[6] = temp[0] * s + temp[1] * c / r - (rpz[0]*c - rpz[4]*s) * c / r;
+    xyz[5] = temp[0] * c - temp[1] * s / r - (rpz[0]*c - rpz[4]*s) * s / r;
+    xyz[6] = temp[0] * s + temp[1] * c / r + (rpz[0]*c - rpz[4]*s) * c / r;
     xyz[7] = temp[2];
 
     // Step 1: Vector [dBz/dx dBz/dy dBz/dz]
