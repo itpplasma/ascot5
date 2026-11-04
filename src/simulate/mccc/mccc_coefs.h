@@ -294,7 +294,16 @@ DECLARE_TARGET_END
  */
 inline static void mccc_coefs_mufun(real mufun[3], real x, mccc_data* mdata) {
 
-    if(!mdata->usetabulated && x!= 0) {
+    if(!mdata->usetabulated && fabs(x) < 0.1) {
+        /* The direct difference loses precision before its derivative does. */
+        real y = x*x;
+        mufun[0] = 4*x/CONST_SQRTPI * (1.0/3 + y*(-1.0/5 + y*(1.0/14
+            + y*(-1.0/54 + y*(1.0/264 + y*(-1.0/1560 + y/10800))))));
+        mufun[1] = erf(x) - 0.5*mufun[0];
+        mufun[2] = 4/CONST_SQRTPI * (1.0/3 + y*(-3.0/5 + y*(5.0/14
+            + y*(-7.0/54 + y*(9.0/264 + y*(-11.0/1560 + 13*y/10800))))));
+    }
+    else if(!mdata->usetabulated && x!= 0) {
         real expm2x = exp(-x*x);
         real erfx   = erf(x);
 
