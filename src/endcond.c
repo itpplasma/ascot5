@@ -140,6 +140,14 @@ void endcond_check_fo(particle_simd_fo* p_f, particle_simd_fo* p_i,
                              + w*p_f->r[i]*cos(p_f->phi[i]);
                     real y = (1-w)*p_i->r[i]*sin(p_i->phi[i])
                              + w*p_f->r[i]*sin(p_f->phi[i]);
+                    real pi[3], pf[3], pxyz_i[3], pxyz_f[3];
+                    pi[0] = p_i->p_r[i]; pi[1] = p_i->p_phi[i]; pi[2] = p_i->p_z[i];
+                    pf[0] = p_f->p_r[i]; pf[1] = p_f->p_phi[i]; pf[2] = p_f->p_z[i];
+                    math_vec_rpz2xyz(pi, pxyz_i, p_i->phi[i]);
+                    math_vec_rpz2xyz(pf, pxyz_f, p_f->phi[i]);
+                    for(int j = 0; j < 3; j++)
+                        pxyz_f[j] = pxyz_i[j] + w*(pxyz_f[j] - pxyz_i[j]);
+
                     real phi = atan2(y, x) - p_i->phi[i];
                     p_f->time[i] = p_i->time[i] + w*(p_f->time[i] - p_i->time[i]);
                     p_f->mileage[i] = p_i->mileage[i]
@@ -153,7 +161,26 @@ void endcond_check_fo(particle_simd_fo* p_f, particle_simd_fo* p_i,
                         p_f->phi[i] = p_i->phi[i] + w*(p_f->phi[i] - p_i->phi[i]);
                     }
                     p_f->z[i]    = p_i->z[i]    + w*(p_f->z[i] - p_i->z[i]);
+                    /* Use the recorded angle: the 2D wall branch interpolates phi. */
+                    math_vec_xyz2rpz(pxyz_f, pf, p_f->phi[i]);
+                    p_f->p_r[i] = pf[0]; p_f->p_phi[i] = pf[1]; p_f->p_z[i] = pf[2];
 
+                    real B_dB[15], psi[1], rho[2];
+                    a5err wallerr = B_field_eval_B_dB(B_dB, p_f->r[i], p_f->phi[i],
+                        p_f->z[i], p_f->time[i], &sim->B_data);
+                    if(!wallerr) wallerr = B_field_eval_psi(psi, p_f->r[i], p_f->phi[i],
+                        p_f->z[i], p_f->time[i], &sim->B_data);
+                    if(!wallerr) wallerr = B_field_eval_rho(rho, psi[0], &sim->B_data);
+                    if(wallerr) p_f->err[i] = wallerr;
+                    else {
+                        p_f->rho[i] = rho[0];
+                        p_f->B_r[i] = B_dB[0]; p_f->B_r_dr[i] = B_dB[1];
+                        p_f->B_r_dphi[i] = B_dB[2]; p_f->B_r_dz[i] = B_dB[3];
+                        p_f->B_phi[i] = B_dB[4]; p_f->B_phi_dr[i] = B_dB[5];
+                        p_f->B_phi_dphi[i] = B_dB[6]; p_f->B_phi_dz[i] = B_dB[7];
+                        p_f->B_z[i] = B_dB[8]; p_f->B_z_dr[i] = B_dB[9];
+                        p_f->B_z_dphi[i] = B_dB[10]; p_f->B_z_dz[i] = B_dB[11];
+                    }
                     p_f->walltile[i] = tile;
                     p_f->endcond[i] |= endcond_wall;
                     p_f->running[i] = 0;
@@ -363,6 +390,25 @@ void endcond_check_gc(particle_simd_gc* p_f, particle_simd_gc* p_i,
                         p_f->phi[i] = p_i->phi[i] + w*(p_f->phi[i] - p_i->phi[i]);
                     }
                     p_f->z[i] = p_i->z[i] + w*(p_f->z[i] - p_i->z[i]);
+                    p_f->ppar[i] = p_i->ppar[i] + w*(p_f->ppar[i] - p_i->ppar[i]);
+                    p_f->mu[i] = p_i->mu[i] + w*(p_f->mu[i] - p_i->mu[i]);
+                    p_f->zeta[i] = p_i->zeta[i] + w*(p_f->zeta[i] - p_i->zeta[i]);
+                    real B_dB[15], psi[1], rho[2];
+                    a5err wallerr = B_field_eval_B_dB(B_dB, p_f->r[i], p_f->phi[i],
+                        p_f->z[i], p_f->time[i], &sim->B_data);
+                    if(!wallerr) wallerr = B_field_eval_psi(psi, p_f->r[i], p_f->phi[i],
+                        p_f->z[i], p_f->time[i], &sim->B_data);
+                    if(!wallerr) wallerr = B_field_eval_rho(rho, psi[0], &sim->B_data);
+                    if(wallerr) p_f->err[i] = wallerr;
+                    else {
+                        p_f->rho[i] = rho[0];
+                        p_f->B_r[i] = B_dB[0]; p_f->B_r_dr[i] = B_dB[1];
+                        p_f->B_r_dphi[i] = B_dB[2]; p_f->B_r_dz[i] = B_dB[3];
+                        p_f->B_phi[i] = B_dB[4]; p_f->B_phi_dr[i] = B_dB[5];
+                        p_f->B_phi_dphi[i] = B_dB[6]; p_f->B_phi_dz[i] = B_dB[7];
+                        p_f->B_z[i] = B_dB[8]; p_f->B_z_dr[i] = B_dB[9];
+                        p_f->B_z_dphi[i] = B_dB[10]; p_f->B_z_dz[i] = B_dB[11];
+                    }
                     p_f->walltile[i] = tile;
                     p_f->endcond[i] |= endcond_wall;
                     p_f->running[i] = 0;
