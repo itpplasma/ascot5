@@ -1373,6 +1373,14 @@ class ImportData():
         # range in R and Z, make interpolation arrays
         rmin, rmax = np.amin(lcfs_r), np.amax(lcfs_r)
         zmin, zmax = np.amin(lcfs_z), np.amax(lcfs_z)
+        # Bound unsampled LCFS extrema by the linear-interpolation remainder.
+        du = 2*np.pi / (ntheta - 1)
+        dv = abs(np.deg2rad(phimax - phimin)) / nphi
+        rpad = np.sum(abs(rmnc[-1]) * (xm**2*du**2 + xn**2*dv**2)) / 8
+        zpad = np.sum(abs(zmns[-1]) * (xm**2*du**2 + xn**2*dv**2)) / 8
+        roundoff = 1e-12 * max(abs(rmin), abs(rmax), abs(zmin), abs(zmax), 1)
+        rmin, rmax = rmin - rpad - roundoff, rmax + rpad + roundoff
+        zmin, zmax = zmin - zpad - roundoff, zmax + zpad + roundoff
         r_2d, z_2d = np.meshgrid(np.linspace(rmin, rmax, nr),
                                  np.linspace(zmin, zmax, nz), indexing="ij")
         points = np.column_stack((r_2d.ravel(), z_2d.ravel()))
