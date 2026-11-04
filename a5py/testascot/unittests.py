@@ -1249,6 +1249,41 @@ class TestPowerDeposition(unittest.TestCase):
                     moment.ordinate("electronpowerdep")
                     + moment.ordinate("ionpowerdep"), rtol=1e-12, atol=1e-30)
 
+class TestWallLoads(unittest.TestCase):
+    """Wall reduction with independently known Cartesian directions."""
+
+    def test_incidence_keeps_marker_angle_when_sorting_tiles(self):
+        from a5py.routines.runmixin import RunMixin
+
+        class Wall:
+            def area(self, normal=False):
+                return (np.ones(2)*unyt.m**2,
+                        np.array([[1., 0.], [0., 1.], [0., 0.]]))
+
+        class Run(RunMixin):
+            wall = Wall()
+            _endstate = True
+
+            def getstate(self, *args, **kwargs):
+                # Tile order deliberately opposes marker order. Each momentum
+                # points normally into its own tile in Cartesian coordinates.
+                return (np.array([2, 1]), np.array([2., 3.])*unyt.J,
+                        np.array([5., 7.])/unyt.s,
+                        np.ones(2)*unyt.kg*unyt.m/unyt.s,
+                        np.zeros(2)*unyt.kg*unyt.m/unyt.s,
+                        np.zeros(2)*unyt.kg*unyt.m/unyt.s,
+                        np.ones(2)*unyt.kg*unyt.m/unyt.s,
+                        np.array([np.pi/2, 0.])*unyt.rad)
+
+        for weighted in [True, False]:
+            ids, area, energy, particles, angle = Run().getwall_loads(
+                weights=weighted)
+            np.testing.assert_array_equal(ids, [1, 2])
+            np.testing.assert_allclose(angle, [0., 0.], atol=1e-12)
+            np.testing.assert_allclose(energy, [21., 10.] if weighted else [3., 2.])
+            np.testing.assert_allclose(particles, [7., 5.] if weighted else [1., 1.])
+
+
 class TestMoments(unittest.TestCase):
     """Class for testing distribution moments.
     """
