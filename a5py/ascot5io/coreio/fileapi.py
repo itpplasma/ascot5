@@ -579,7 +579,7 @@ _EV_TO_EXECUTABLE_EV = float((1 * unyt.eV).to("J").v) / 1.602176565e-19
 def _ev_power(unit):
     """Return the power of eV in a unit string."""
     powers = unyt.Unit(unit).expr.as_powers_dict()
-    return sum(power for symbol, power in powers.items() if str(symbol) == "eV")
+    return int(sum(power for symbol, power in powers.items() if str(symbol) == "eV"))
 
 def write_data(group, name, data, shape, dtype, unit=None, compress=False):
     """Write a dataset.
