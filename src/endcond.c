@@ -134,6 +134,22 @@ void endcond_check_fo(particle_simd_fo* p_f, particle_simd_fo* p_i,
                 int tile = wall_hit_wall(
                     p_i->r[i], p_i->phi[i], p_i->z[i],
                     p_f->r[i], p_f->phi[i], p_f->z[i], &sim->wall_data, &w_coll);
+                /* A crossing after the time or mileage limit is no hit; one
+                 * before it ends the marker at the wall only. */
+                if(tile > 0 && active_tlim) {
+                    real t_hit = p_i->time[i]
+                        + w_coll*(p_f->time[i] - p_i->time[i]);
+                    real m_hit = p_i->mileage[i]
+                        + w_coll*(p_f->mileage[i] - p_i->mileage[i]);
+                    if((!sim->reverse_time && t_hit > sim->endcond_lim_simtime)
+                       || (sim->reverse_time && t_hit < sim->endcond_lim_simtime)
+                       || m_hit > sim->endcond_max_mileage) {
+                        tile = 0;
+                    }
+                    else {
+                        p_f->endcond[i] &= ~endcond_tlim;
+                    }
+                }
                 if(tile > 0) {
                     real w = w_coll;
                     real x = (1-w)*p_i->r[i]*cos(p_i->phi[i])
@@ -371,6 +387,22 @@ void endcond_check_gc(particle_simd_gc* p_f, particle_simd_gc* p_i,
                 int tile = wall_hit_wall(p_i->r[i], p_i->phi[i], p_i->z[i],
                                          p_f->r[i], p_f->phi[i], p_f->z[i],
                                          &sim->wall_data, &w_coll);
+                /* A crossing after the time or mileage limit is no hit; one
+                 * before it ends the marker at the wall only. */
+                if(tile > 0 && active_tlim) {
+                    real t_hit = p_i->time[i]
+                        + w_coll*(p_f->time[i] - p_i->time[i]);
+                    real m_hit = p_i->mileage[i]
+                        + w_coll*(p_f->mileage[i] - p_i->mileage[i]);
+                    if((!sim->reverse_time && t_hit > sim->endcond_lim_simtime)
+                       || (sim->reverse_time && t_hit < sim->endcond_lim_simtime)
+                       || m_hit > sim->endcond_max_mileage) {
+                        tile = 0;
+                    }
+                    else {
+                        p_f->endcond[i] &= ~endcond_tlim;
+                    }
+                }
                 if(tile > 0) {
                     real w = w_coll;
                     real x = (1-w)*p_i->r[i]*cos(p_i->phi[i])
@@ -573,6 +605,22 @@ void endcond_check_ml(particle_simd_ml* p_f, particle_simd_ml* p_i,
                 int tile = wall_hit_wall(p_i->r[i], p_i->phi[i], p_i->z[i],
                                          p_f->r[i], p_f->phi[i], p_f->z[i],
                                          &sim->wall_data, &w_coll);
+                /* A crossing after the time or mileage limit is no hit; one
+                 * before it ends the marker at the wall only. */
+                if(tile > 0 && active_tlim) {
+                    real t_hit = p_i->time[i]
+                        + w_coll*(p_f->time[i] - p_i->time[i]);
+                    real m_hit = p_i->mileage[i]
+                        + w_coll*(p_f->mileage[i] - p_i->mileage[i]);
+                    if((!sim->reverse_time && t_hit > sim->endcond_lim_simtime)
+                       || (sim->reverse_time && t_hit < sim->endcond_lim_simtime)
+                       || m_hit > sim->endcond_max_mileage) {
+                        tile = 0;
+                    }
+                    else {
+                        p_f->endcond[i] &= ~endcond_tlim;
+                    }
+                }
                 if(tile > 0) {
                     p_f->walltile[i] = tile;
                     p_f->endcond[i] |= endcond_wall;

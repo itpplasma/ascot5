@@ -783,6 +783,65 @@ class TestWallEndState(unittest.TestCase):
         finally:
             ascot2py.wall_3d_free(ctypes.byref(sim.wall_data.w3d))
 
+    def test_wall_and_time_limit_in_one_step(self):
+        """The earlier of a wall crossing and the time or mileage limit ends the marker."""
+        import ctypes
+        from a5py.ascotpy import ascot2py
+
+        sim = ascot2py.sim_data()
+        sim.endcond_active = ascot2py.endcond_wall | ascot2py.endcond_tlim
+        sim.wall_data.type = ascot2py.wall_type_3D
+        x = (ctypes.c_double * 3)(1, 1, 1)
+        y = (ctypes.c_double * 3)(-2, 2, 0)
+        z = (ctypes.c_double * 3)(-2, -2, 2)
+        flag = (ctypes.c_int * 1)(1)
+        self.assertEqual(ascot2py.wall_3d_init(
+            ctypes.byref(sim.wall_data.w3d), 1, x, y, z, flag), 0)
+        # The step runs from t = 2 to 4 and mileage 10 to 12; it crosses the wall
+        # halfway, at t = 3 and mileage 11.
+        cases = [(3.5, 100., ascot2py.endcond_wall),
+                 (100., 11.5, ascot2py.endcond_wall),
+                 (2.5, 100., ascot2py.endcond_tlim),
+                 (100., 10.5, ascot2py.endcond_tlim)]
+        try:
+            for kind in ["fo", "gc"]:
+                for tlim, mlim, expected in cases:
+                    with self.subTest(kind=kind, tlim=tlim, mlim=mlim):
+                        sim.endcond_lim_simtime = tlim
+                        sim.endcond_max_mileage = mlim
+                        states = [getattr(ascot2py, "particle_simd_"+kind)()
+                                  for _ in range(2)]
+                        for q in states:
+                            getattr(ascot2py, "particle_allocate_"+kind)(
+                                ctypes.byref(q), 1)
+                            for name, _ in q._fields_:
+                                if name != "n_mrk":
+                                    getattr(q, name)[0] = 0
+                            q.running[0] = 1
+                        initial, final = states
+                        try:
+                            for q, xx, yy in [(initial, .5, -.25), (final, 1.5, .75)]:
+                                q.r[0], q.phi[0] = np.hypot(xx, yy), np.arctan2(yy, xx)
+                            initial.time[0], final.time[0] = 2, 4
+                            initial.mileage[0], final.mileage[0] = 10, 12
+                            getattr(ascot2py, "endcond_check_"+kind)(
+                                ctypes.byref(final), ctypes.byref(initial),
+                                ctypes.byref(sim))
+                            self.assertEqual(final.endcond[0], expected)
+                            self.assertEqual(final.running[0], 0)
+                            if expected == ascot2py.endcond_wall:
+                                self.assertGreater(final.walltile[0], 0)
+                            else:
+                                self.assertEqual(final.walltile[0], 0)
+                                self.assertEqual(final.time[0], 4)
+                        finally:
+                            for q in states:
+                                for name, _ in q._fields_:
+                                    if name != "n_mrk":
+                                        ascot2py.libascot_deallocate(getattr(q, name))
+        finally:
+            ascot2py.wall_3d_free(ctypes.byref(sim.wall_data.w3d))
+
     def check_hit(self, sim, expected, w):
         import ctypes
         from a5py.ascotpy import ascot2py
