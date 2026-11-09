@@ -212,7 +212,7 @@ int main(int argc, char** argv) {
 
     /* Display marker summary and free marker arrays */
     if(sim.mpi_rank == sim.mpi_root) {
-        print_marker_summary(pout, n_tot);
+        print_marker_summary(pout, n_gathered);
     }
     free(pout);
 
