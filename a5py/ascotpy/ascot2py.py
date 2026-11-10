@@ -2347,6 +2347,9 @@ struct_c__SA_sim_data._fields_ = [
     ('qid_mhd', ctypes.c_char * 256),
     ('qid_asigma', ctypes.c_char * 256),
     ('qid_nbi', ctypes.c_char * 256),
+    ('collision_noise', ctypes.c_int32),
+    ('PADDING_collision_noise', ctypes.c_ubyte * 4),
+    ('collision_noise_seed', ctypes.c_double),
 ]
 
 sim_data = struct_c__SA_sim_data

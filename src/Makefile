@@ -190,6 +190,7 @@ OBJS= math.o list.o octree.o error.o \
 	asigma.o mpi_interface.o boschhale.o bbnbi5.o
 
 BINS=test_math test_nbi test_bsearch test_gc_momentum test_particle_copy test_mccc_clog \
+	test_collision_noise \
 	test_wall_2d test_plasma test_random \
 	test_wall_3d test_B test_offload test_E \
 	test_interp1Dcomp test_linint3D test_N0 test_N0_1D \
@@ -218,6 +219,9 @@ test_gc_momentum: $(UTESTDIR)test_gc_momentum.o $(OBJS)
 
 test_mccc_clog: $(UTESTDIR)test_mccc_clog.o $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
+
+test_collision_noise: $(UTESTDIR)test_collision_noise.o
+	$(CC) -o $@ $^ $(CFLAGS) -lm
 
 test_B: $(UTESTDIR)test_B.o $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)

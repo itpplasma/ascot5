@@ -7,6 +7,7 @@
 #include <hdf5_hl.h>
 #include "../ascot5.h"
 #include "../consts.h"
+#include "../print.h"
 #include "../diag.h"
 #include "../diag/diag_orb.h"
 #include "../diag/dist_5D.h"
@@ -112,6 +113,33 @@ int hdf5_options_read(hid_t file, sim_data* sim, char* qid){
     if( hdf5_read_double(OPTPATH "DISABLE_GCDIFF_CCOLL", &tempfloat,
                          file, qid, __FILE__, __LINE__) ) {return 1;}
     sim->disable_gcdiffccoll = (int)tempfloat;
+    /* Optional: inputs written before these options existed keep the
+     * generator stream. */
+    char noisepath[256];
+    sim->collision_noise = 0;
+    sim->collision_noise_seed = 0;
+    if( H5LTpath_valid(file, hdf5_gen_path(OPTPATH "COLLISION_NOISE", qid,
+                                           noisepath), 1) > 0 ) {
+        if( hdf5_read_double(OPTPATH "COLLISION_NOISE", &tempfloat,
+                             file, qid, __FILE__, __LINE__) ) {return 1;}
+        sim->collision_noise = (int)tempfloat;
+    }
+    if( H5LTpath_valid(file, hdf5_gen_path(OPTPATH "COLLISION_NOISE_SEED",
+                                           qid, noisepath), 1) > 0 ) {
+        if( hdf5_read_double(OPTPATH "COLLISION_NOISE_SEED", &tempfloat,
+                             file, qid, __FILE__, __LINE__) ) {return 1;}
+        sim->collision_noise_seed = tempfloat;
+    }
+    if( sim->collision_noise < 0 || sim->collision_noise > 2 ) {
+        print_err("Error: COLLISION_NOISE must be 0, 1 or 2\n");
+        return 1;
+    }
+    if( sim->collision_noise != 0 && sim->enable_clmbcol &&
+        !(sim->sim_mode == 2 && !sim->enable_ada) ) {
+        print_err("Error: COLLISION_NOISE 1 or 2 needs SIM_MODE=2 with "
+                  "ENABLE_ADAPTIVE=0, whose fixed step indexes the noise\n");
+        return 1;
+    }
     if( hdf5_read_double(OPTPATH "REVERSE_TIME", &tempfloat,
                          file, qid, __FILE__, __LINE__) ) {return 1;}
     sim->reverse_time = (int)tempfloat;
