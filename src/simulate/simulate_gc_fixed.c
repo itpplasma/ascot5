@@ -22,6 +22,7 @@
 #include "simulate_gc_fixed.h"
 #include "step/step_gc_rk4.h"
 #include "mccc/mccc.h"
+#include "mccc/collision_noise.h"
 
 DECLARE_TARGET_SIMD_UNIFORM(sim)
 real simulate_gc_fixed_inidt(sim_data* sim, particle_simd_gc* p, int i);
@@ -151,7 +152,22 @@ void simulate_gc_fixed(particle_queue* pq, sim_data* sim, int mrk_array_size) {
 
         /* Euler-Maruyama method for collisions */
         if(sim->enable_clmbcol) {
-            random_normal_simd(sim->random_data, 5*p.n_mrk, rnd);
+            if(sim->collision_noise == 0) {
+                random_normal_simd(sim->random_data, 5*p.n_mrk, rnd);
+            }
+            else {
+                /* Counter-based: the k-th step of marker id draws the same
+                 * numbers in every code that shares the seed and step. */
+                uint64_t seed = (uint64_t)sim->collision_noise_seed;
+                for(int i = 0; i < p.n_mrk; i++) {
+                    uint64_t k = (uint64_t)llround(fabs(p.mileage[i]) / hin[i]);
+                    for(int j = 0; j < 5; j++) {
+                        rnd[j*p.n_mrk + i] = sim->collision_noise == 1 ?
+                            collision_noise_normal(seed, (uint64_t)p.id[i], k, j)
+                            : 0.0;
+                    }
+                }
+            }
             mccc_gc_euler(&p, hin, &sim->B_data, &sim->plasma_data,
                           &sim->mccc_data, rnd);
         }

@@ -149,6 +149,11 @@ typedef struct {
     char qid_asigma[256];  /**< Asigma QID if active not used  */
     char qid_nbi[256];     /**< NBI QID if active not used     */
 
+    /* Options - collision noise (appended to keep the layout above) */
+    int collision_noise;       /**< 0 generator stream, 1 counter-based
+                                    (seed, id, step), 2 zero noise            */
+    real collision_noise_seed; /**< Seed of the counter-based noise           */
+
 } sim_data;
 
 void simulate_init(sim_data* sim);

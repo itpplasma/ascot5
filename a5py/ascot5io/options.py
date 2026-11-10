@@ -78,6 +78,8 @@ class Opt(DataGroup):
         self._OPT_DISABLE_ENERGY_CCOLL       = 0
         self._OPT_DISABLE_PITCH_CCOLL        = 0
         self._OPT_DISABLE_GCDIFF_CCOLL       = 0
+        self._OPT_COLLISION_NOISE            = 0
+        self._OPT_COLLISION_NOISE_SEED       = 0
         self._OPT_REVERSE_TIME               = 0
         self._OPT_ENABLE_DIST_5D             = 0
         self._OPT_ENABLE_DIST_6D             = 0
@@ -423,6 +425,26 @@ class Opt(DataGroup):
         """Disable guiding center spatial diffusion
         """
         return self._OPT_DISABLE_GCDIFF_CCOLL
+
+    @property
+    def _COLLISION_NOISE(self):
+        """Noise of the collision steps
+
+        - 0 Generator stream (default)
+        - 1 Counter-based: the k-th fixed step of marker id with seed
+          COLLISION_NOISE_SEED draws the same numbers in every code that
+          shares the generator, here and in SIMPLE
+        - 2 Zero noise: deterministic drift only
+
+        1 and 2 need SIM_MODE=2 with ENABLE_ADAPTIVE=0.
+        """
+        return self._OPT_COLLISION_NOISE
+
+    @property
+    def _COLLISION_NOISE_SEED(self):
+        """Seed of the counter-based collision noise (integer below 2**53)
+        """
+        return self._OPT_COLLISION_NOISE_SEED
 
     @property
     def _REVERSE_TIME(self):

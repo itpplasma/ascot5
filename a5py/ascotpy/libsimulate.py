@@ -70,6 +70,8 @@ class LibSimulate():
         self._sim.disable_energyccoll = int(opt["DISABLE_ENERGY_CCOLL"])
         self._sim.disable_pitchccoll  = int(opt["DISABLE_PITCH_CCOLL"])
         self._sim.disable_gcdiffccoll = int(opt["DISABLE_GCDIFF_CCOLL"])
+        self._sim.collision_noise = int(opt.get("COLLISION_NOISE", 0))
+        self._sim.collision_noise_seed = float(opt.get("COLLISION_NOISE_SEED", 0))
         self._sim.reverse_time        = int(opt["REVERSE_TIME"])
 
         # Which end conditions are active
