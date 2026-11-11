@@ -806,6 +806,14 @@ class PhysTest():
         print("Test GC transformation:")
         passed = True
 
+        # A first-order transformation removes the first-order gyro-oscillation
+        # of the particle's magnetic moment; a wrong one can still match the
+        # mean while it oscillates more than the uncorrected moment.
+        oscgo = np.std(mugo) / np.mean(mugo)
+        oscgo2gc = np.std(mugo2gc) / np.mean(mugo2gc)
+        print("  mu oscillation GO %1.3e GO2GC %1.3e" % (oscgo, oscgo2gc))
+        if oscgo2gc > 0.05*oscgo: print("(FAILED)"); passed = False
+
         mugo = np.mean(mugo); mugc = np.mean(mugc); mugo2gc = np.mean(mugo2gc)
         ego  = np.mean(ego);  egc  = np.mean(egc);  ego2gc  = np.mean(ego2gc)
         pgo  = np.mean(pgo);  pgc  = np.mean(pgc);  pgo2gc  = np.mean(pgo2gc)

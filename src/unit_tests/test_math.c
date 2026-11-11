@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include "../ascot5.h"
 #include "../math.h"
+#include "../gctransform.h"
 
 /**
  * Evaluate some mathematical function to be used for testing purposes
@@ -39,6 +40,34 @@ int main(void) {
                        phi, j, cartesian[j]);
                 return 1;
             }
+        }
+    }
+
+    /* A purely toroidal field of constant magnitude has curvature -Rhat/R
+     * and neither grad|B| nor torsion, so the first-order guiding-centre
+     * momentum and moment follow from the curvature alone:
+     * ppar = ppar0 (1 + rho rhohat_R / R),
+     * mu = mu0 - rho ppar0^2 rhohat_R / (m B R). */
+    for(i = 0; i < 6; i++) {
+        real mass = 1.67262192369e-27, charge = 1.602176634e-19, b0 = 2.5;
+        real r = 5.0 + 0.3*i, phi = -3.0 + 1.1*i;
+        real pr = mass*(1.0e6 - 3.0e5*i), pphi = mass*(2.0e6 - 4.5e5*i),
+             pz = mass*(0.4e6 + 2.0e5*i);
+        real toroidal[12] = {0, 0, 0, 0, b0, 0, 0, 0, 0, 0, 0, 0};
+        real R, Phi, Z, ppar, mu, zeta;
+        gctransform_particle2guidingcenter(mass, charge, toroidal, r, phi,
+                                           0.2, pr, pphi, pz, &R, &Phi, &Z,
+                                           &ppar, &mu, &zeta);
+        real pperp = sqrt(pr*pr + pz*pz);
+        real mu0 = pperp*pperp/(2*mass*b0);
+        real rho = pperp/(charge*b0), rhohat_r = pz/pperp;
+        real ppar_exact = pphi*(1 + rho*rhohat_r/r);
+        real mu_exact = mu0 - rho*pphi*pphi*rhohat_r/(mass*b0*r);
+        if(fabs(ppar/ppar_exact - 1) > 1e-13 || fabs(mu/mu_exact - 1) > 1e-13) {
+            printf("Curvature of a toroidal field failed: case %d, "
+                   "ppar/exact-1 %g, mu/exact-1 %g\n", i,
+                   ppar/ppar_exact - 1, mu/mu_exact - 1);
+            return 1;
         }
     }
 

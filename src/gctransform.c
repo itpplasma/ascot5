@@ -137,20 +137,23 @@ void gctransform_particle2guidingcenter(
     nablabhat[7] = (B_dBxyz[10] - gradB[2] * bhat[1]) / Bnorm;
     nablabhat[8] = (B_dBxyz[11] - gradB[2] * bhat[2]) / Bnorm;
 
-    /* Magnetic field curvature vector = bhat dot nablabhat.
+    /* Magnetic field curvature vector kappa = (bhat dot nabla) bhat, with
+       (bhat dot nabla) B_j = bhat_i dB_j/dx_i. The transposed sum bhat_i
+       dB_i/dx_j is grad|B| and gives grad_perp ln|B| instead, which equals
+       kappa only where curl B is parallel to B.
        Note that nabla x bhat = tau bhat + bhat x kappa */
     real kappa[3];
     kappa[0] =
         ( bhat[0] * B_dBxyz[1]  +
-          bhat[1] * B_dBxyz[5]  +
-          bhat[2] * B_dBxyz[9]  - math_dot(bhat, gradB) * bhat[0] ) / Bnorm;
+          bhat[1] * B_dBxyz[2]  +
+          bhat[2] * B_dBxyz[3]  - math_dot(bhat, gradB) * bhat[0] ) / Bnorm;
     kappa[1] =
-        ( bhat[0] * B_dBxyz[2]  +
+        ( bhat[0] * B_dBxyz[5]  +
           bhat[1] * B_dBxyz[6]  +
-          bhat[2] * B_dBxyz[10] - math_dot(bhat, gradB) * bhat[1] ) / Bnorm;
+          bhat[2] * B_dBxyz[7]  - math_dot(bhat, gradB) * bhat[1] ) / Bnorm;
     kappa[2] =
-        ( bhat[0] * B_dBxyz[3]  +
-          bhat[1] * B_dBxyz[7]  +
+        ( bhat[0] * B_dBxyz[9]  +
+          bhat[1] * B_dBxyz[10] +
           bhat[2] * B_dBxyz[11] - math_dot(bhat, gradB) * bhat[2] ) / Bnorm;
 
     /* Zeroth order mu and ppar */
@@ -373,20 +376,23 @@ void gctransform_guidingcenter2particle(
     nablabhat[7] = (B_dBxyz[10] - gradB[2] * bhat[1]) / Bnorm;
     nablabhat[8] = (B_dBxyz[11] - gradB[2] * bhat[2]) / Bnorm;
 
-    /* Magnetic field curvature vector = bhat dot nablabhat.
+    /* Magnetic field curvature vector kappa = (bhat dot nabla) bhat, with
+       (bhat dot nabla) B_j = bhat_i dB_j/dx_i. The transposed sum bhat_i
+       dB_i/dx_j is grad|B| and gives grad_perp ln|B| instead, which equals
+       kappa only where curl B is parallel to B.
        Note that nabla x bhat = tau bhat + bhat x kappa */
     real kappa[3];
     kappa[0] =
         ( bhat[0] * B_dBxyz[1]  +
-          bhat[1] * B_dBxyz[5]  +
-          bhat[2] * B_dBxyz[9]  - math_dot(bhat, gradB) * bhat[0] ) / Bnorm;
+          bhat[1] * B_dBxyz[2]  +
+          bhat[2] * B_dBxyz[3]  - math_dot(bhat, gradB) * bhat[0] ) / Bnorm;
     kappa[1] =
-        ( bhat[0] * B_dBxyz[2]  +
+        ( bhat[0] * B_dBxyz[5]  +
           bhat[1] * B_dBxyz[6]  +
-          bhat[2] * B_dBxyz[10] - math_dot(bhat, gradB) * bhat[1] ) / Bnorm;
+          bhat[2] * B_dBxyz[7]  - math_dot(bhat, gradB) * bhat[1] ) / Bnorm;
     kappa[2] =
-        ( bhat[0] * B_dBxyz[3]  +
-          bhat[1] * B_dBxyz[7]  +
+        ( bhat[0] * B_dBxyz[9]  +
+          bhat[1] * B_dBxyz[10] +
           bhat[2] * B_dBxyz[11] - math_dot(bhat, gradB) * bhat[2] ) / Bnorm;
 
     /* Choose a fixed basis so that e2 = bhat x e1. We choose e1 = bhat x z */
