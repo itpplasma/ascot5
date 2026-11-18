@@ -185,10 +185,13 @@ a5err suzuki_sigmav(real* sigmav, real EperAmu, real vnorm, real ne, real te,
     /* Select low- or high-energy coefficient tables */
     real (*A)[10];
     real (*B)[12];
+    /* The low-energy fit holds from 10 keV/amu and is extrapolated to 9.
+     * Below that neither table applies, so the evaluation fails instead of
+     * falling through to the high-energy table. */
     if(EperAmu >= 9.0 && EperAmu < 100.0) {
         A = A_lowE;
         B = B_lowE;
-    } else if(EperAmu < 10000.0) {
+    } else if(EperAmu >= 100.0 && EperAmu < 10000.0) {
         A = A_highE;
         B = B_highE;
     } else {
