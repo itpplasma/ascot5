@@ -44,6 +44,7 @@ GPU_DECLARE_TARGET_SIMD_UNIFORM(boozerdata, mhddata, Bdata, includemode)
 a5err mhd_eval(real mhd_dmhd[10], real r, real phi, real z, real t,
                int includemode, boozer_data* boozerdata, mhd_data* mhddata,
                B_field_data* Bdata);
+GPU_DECLARE_TARGET_SIMD_UNIFORM_END
 DECLARE_TARGET_SIMD_UNIFORM(boozerdata, mhddata, Bdata, pertonly,\
                                  includemode)
 a5err mhd_perturbations(real pert_field[7], real r, real phi, real z,

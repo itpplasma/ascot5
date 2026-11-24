@@ -151,6 +151,7 @@ DECLARE_TARGET_SIMD
 real* math_rsearch(const real key, const real* base, int num);
 GPU_DECLARE_TARGET_SIMD_UNIFORM(rv,zv,n)
 int math_point_in_polygon(real r, real z, real* rv, real* zv, int n);
+GPU_DECLARE_TARGET_SIMD_UNIFORM_END
 
 
 #endif
