@@ -1104,7 +1104,7 @@ def poincare(x, y, ids, connlen=None, xlim=None, ylim=None, xlabel=None,
         cpick = np.arange(nc)
         np.random.shuffle(cpick)
         for i in range(nc):
-            idx = np.in1d(ids, uids[i::nc])
+            idx = np.isin(np.ravel(ids), uids[i::nc])
             axes.plot(x[idx], y[idx], color=cmap(cpick[i]/nc),
                       linestyle="None", marker=".", markersize=markersize)
 
@@ -1192,7 +1192,7 @@ def poincare(x, y, ids, connlen=None, xlim=None, ylim=None, xlabel=None,
         cpick = np.arange(nc)
         np.random.shuffle(cpick)
         for i in range(nc):
-            idx = np.in1d(ids, uids[i::nc])
+            idx = np.isin(np.ravel(ids), uids[i::nc])
             axes.plot(x[idx], y[idx], color=colours[nc_b+cpick[i]],
                       linestyle="None", marker=".", markersize=markersize)
 

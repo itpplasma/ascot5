@@ -29,7 +29,7 @@ class Asigma_loc(DataGroup):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key in ["nreac"]:
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         return out
 

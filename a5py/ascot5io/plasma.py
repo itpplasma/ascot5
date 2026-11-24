@@ -33,7 +33,7 @@ class plasma_1D(DataGroup):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key in ["nion", "nrho"]:
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         out["idensity"] = np.transpose(out["idensity"])
         return out
@@ -306,7 +306,7 @@ class plasma_2D(DataGroup):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key in ["nion", "nrho"]:
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         for name in ["vtor", "edensity", "etemperature", "idensity",
                      "itemperature"]:
@@ -471,7 +471,7 @@ class plasma_1DS(DataGroup):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key in ["nion", "nrho"]:
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         out["idensity"] = np.transpose(out["idensity"])
         return out
@@ -735,7 +735,7 @@ class plasma_1Dt(DataGroup):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key in ["nion", "nrho", "ntime"]:
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         return out
 
