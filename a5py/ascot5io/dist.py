@@ -1189,8 +1189,8 @@ class Dist(DataContainer):
         particle number unlike the alternative which would be to interpolate
         the particle density, but which otherwise could be more accurate.
 
-        Energy is in electronvolts and pitch is ppa/(ppa^2 + ppe^2)^0.5. The
-        transformation is relativistic.
+        Energy edges without units are in electronvolts. Pitch is
+        ppa/(ppa^2 + ppe^2)^0.5. The transformation is relativistic.
 
         Parameters
         ----------
@@ -1297,8 +1297,8 @@ class Dist(DataContainer):
             if a != "ppar" and a != "pperp":
                 ranges.append(range(dist.abscissa(a).size))
 
-        #
-        ie = np.digitize(ekin0,  ekin_edges)-1
+        # NumPy digitize compares the raw values in each array.
+        ie = np.digitize(ekin0.to_value(ekin_edges.units), ekin_edges.v)-1
         ip = np.digitize(pitch0, pitch_edges)-1
         mask = np.logical_or.reduce([ie < 0, ip < 0, ie >= ekin_edges.size-1, ip >= pitch_edges.size-1])
         ie = ie[~mask]
