@@ -1,5 +1,8 @@
 .PHONY: doc
 
+# The recursive builds share generated headers and object files in src.
+.NOTPARALLEL:
+
 ascot5_main:
 	$(MAKE) -C src ascot5_main
 	mkdir -p build
