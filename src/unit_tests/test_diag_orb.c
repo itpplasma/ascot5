@@ -37,13 +37,13 @@ int test_radial_crossings(){
 
     ir = 0.1; fr = 0.3; r0 = 0.2; correct = 0.5; RADIAL_CROSSING(fr,ir,r0,correct,got)
     ir = 0.3; fr = 0.1; r0 = 0.2; correct = 0.5; RADIAL_CROSSING(fr,ir,r0,correct,got)
-    ir = 0.4; fr = 0.3; r0 = 0.2; correct = 0.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
+    ir = 0.4; fr = 0.3; r0 = 0.2; correct = -1.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
     ir = 0.9; fr = 1.1; r0 = 1.0; correct = 0.5; RADIAL_CROSSING(fr,ir,r0,correct,got)
     ir = 0.0; fr = 0.2; r0 = 0.0; correct = 0.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
-    ir = 0.0; fr = 0.2; r0 = 0.2; correct = 0.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
+    ir = 0.0; fr = 0.2; r0 = 0.2; correct = -1.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
     ir = 0.0; fr = 0.200000000000001; r0 = 0.2; correct = 1.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
-    ir = 0.0; fr = 0.0; r0 = 0.2; correct = 0.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
-    ir = 0.4; fr = 0.4; r0 = 0.4; correct = 0.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
+    ir = 0.0; fr = 0.0; r0 = 0.2; correct = -1.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
+    ir = 0.4; fr = 0.4; r0 = 0.4; correct = -1.0; RADIAL_CROSSING(fr,ir,r0,correct,got)
 
     printf("Testing finished with radial crossings.\n");
 
@@ -104,54 +104,34 @@ int test_update_gc(){
 //diag_orb_update_gc(diag_orb_data* data, particle_simd_gc* p_f,
 //                        particle_simd_gc* p_i)
 
-#define NFLD  DIAG_ORB_GCFIELDS
-#define NMRK  NSIMD
-#define NPNT  1
-#define NPOLPLOTS 0
-#define NTORPLOTS 0
-#define NRADPLOTS 2
 #define RADIALSTEP 0.025
 
-#define nData   NFLD * NMRK * NPNT
-
-    diag_orb_data data;
-    diag_orb_offload_data offload_data;
-    real offload_array[nData];
+    diag_orb_data data = {
+        .mode = DIAG_ORB_POINCARE, .Nfld = DIAG_ORB_GCFIELDS, .Nmrk = NSIMD,
+        .Npnt = 1, .record_mode = simulate_mode_gc, .nradialplots = 2,
+        .radialdistances = {0.11, 0.21},
+    };
     real correct, got;
-    particle_simd_gc p_f, p_i;
+    real zero[NSIMD] = {0}, rho_i[NSIMD], rho_f[NSIMD];
+    integer id[NSIMD], index[NSIMD];
+    particle_simd_gc p_i = {
+        .r = zero, .phi = zero, .z = zero, .ppar = zero, .mu = zero,
+        .zeta = zero, .weight = zero, .charge = zero, .theta = zero,
+        .B_r = zero, .B_phi = zero, .B_z = zero, .id = id, .index = index,
+        .rho = rho_i, .mileage = rho_i, .n_mrk = NSIMD,
+    };
+    particle_simd_gc p_f = p_i;
+    p_f.rho = rho_f;
+    p_f.mileage = rho_f;
 
     printf("Testing update_gc in poincare mode for radial steps.\n");
-
-
-    offload_data.mode              = DIAG_ORB_POINCARE;   /**< Defines condition for recording markers       */
-    offload_data.Nfld              = NFLD;/**< Number of fields the record contains          */
-    offload_data.Nmrk              = NMRK;/**< Number of markers to record                   */
-    offload_data.Npnt              = NPNT;/**< Maximum number of points to keep recorded     */
-    offload_data.record_mode       = simulate_mode_gc;    /**< Defines what fields are initialized           */
-    offload_data.writeInterval     = 0.01; /**< Interval at which markers are recorded        */
-    offload_data.ntoroidalplots    = NTORPLOTS; /**< Number of toroidal Poincare planes            */
-    offload_data.npoloidalplots    = NPOLPLOTS;/**< Number of toroidal Poincare planes            */
-    offload_data.nradialplots      = NRADPLOTS;   /**< Number of radial Poincare planes              */
-    offload_data.toroidalangles[0] = 0.0; /**< Toroidal plane angles */
-    offload_data.toroidalangles[1] = 0.1;
-    offload_data.poloidalangles[0] = 0.0; /**< Poloidal plane angles */
-    offload_data.poloidalangles[1] = 0.1;
-    offload_data.radialdistances[0]= 0.11;    /**< Radial plane angles*/
-    offload_data.radialdistances[1]= 0.21;
-
-    // Initialize the data
-    diag_orb_init(&data, &offload_data, offload_array);
-
+    diag_orb_init(&data);
 
     for ( iSIMD=0; iSIMD<NSIMD; iSIMD++ ){
-        p_i.rho[iSIMD]    =  RADIALSTEP*iSIMD;    p_f.rho[iSIMD]     = RADIALSTEP*(iSIMD+1);
-        //printf("rho %g -- %g \n",RADIALSTEP*iSIMD,RADIALSTEP*(iSIMD+1) );
-        p_i.time[iSIMD]   =  RADIALSTEP*iSIMD;          p_f.time[iSIMD]    = RADIALSTEP*(iSIMD+1);
-        p_i.phi[iSIMD]    = -0.05;         p_f.phi[iSIMD]     = 0.05;
-        p_i.theta[iSIMD]  = -0.05;         p_f.theta[iSIMD]   = 0.05;
-        p_i.mileage[iSIMD]=  RADIALSTEP*iSIMD;          p_f.mileage[iSIMD] = RADIALSTEP*(iSIMD+1);
-        p_i.id[iSIMD]     =  iSIMD+20;     p_f.id[iSIMD]      =  iSIMD+20;
-        p_i.index[iSIMD]  = iSIMD;         p_f.index[iSIMD]  = iSIMD;
+        rho_i[iSIMD] = RADIALSTEP*iSIMD;
+        rho_f[iSIMD] = RADIALSTEP*(iSIMD+1);
+        id[iSIMD] = iSIMD + 20;
+        index[iSIMD] = iSIMD;
     }
 
 
@@ -167,10 +147,10 @@ int test_update_gc(){
         idx    = imrk * data.Npnt + ipoint;
         rhoi = p_i.rho[iSIMD];
         rhof = p_f.rho[iSIMD];
-        if(       rhoi < offload_data.radialdistances[0] &&  rhof > offload_data.radialdistances[0]    ) {
-            correct = offload_data.radialdistances[0];
-        }else if (rhoi < offload_data.radialdistances[1] &&  rhof > offload_data.radialdistances[1]   ) {
-            correct = offload_data.radialdistances[1];
+        if(       rhoi < data.radialdistances[0] &&  rhof > data.radialdistances[0]    ) {
+            correct = data.radialdistances[0];
+        }else if (rhoi < data.radialdistances[1] &&  rhof > data.radialdistances[1]   ) {
+            correct = data.radialdistances[1];
         }else{
             correct = 0.0;
         }
@@ -207,6 +187,58 @@ int test_update_gc(){
 
 
 
+static int test_update_fo(void) {
+    const real rho[] = {0.9, 1.3, 0.9, 1.0, 1.3, 1.0};
+    const real mileage[] = {0.0, 4.0, 8.0, 9.0, 12.0, 15.0};
+    const real p_phi[] = {0.0, 8.0, 0.0, 2.0, 8.0, 2.0};
+    const real expected_mileage[] = {1.0, 7.0, 9.0, 15.0};
+    const real expected_direction[] = {1.0, -1.0, 1.0, -1.0};
+    diag_orb_data data = {
+        .mode = DIAG_ORB_POINCARE, .Nfld = DIAG_ORB_FOFIELDS, .Nmrk = 1,
+        .Npnt = 5, .record_mode = simulate_mode_fo, .nradialplots = 1,
+        .radialdistances = {1.0},
+    };
+    real zero[NSIMD] = {0}, rho_i[NSIMD], rho_f[NSIMD];
+    real mileage_i[NSIMD], mileage_f[NSIMD], p_phi_i[NSIMD], p_phi_f[NSIMD];
+    integer id[NSIMD] = {1}, index[NSIMD] = {0};
+    particle_simd_fo p_i = {
+        .r = zero, .phi = zero, .z = zero, .p_r = zero, .p_z = zero,
+        .p_phi = p_phi_i, .weight = zero, .charge = zero, .rho = rho_i,
+        .theta = zero, .B_r = zero, .B_phi = zero, .B_z = zero, .id = id,
+        .mileage = mileage_i, .index = index, .n_mrk = NSIMD,
+    };
+    particle_simd_fo p_f = p_i;
+    p_f.rho = rho_f;
+    p_f.mileage = mileage_f;
+    p_f.p_phi = p_phi_f;
+
+    diag_orb_init(&data);
+    for(int step = 0; step < 5; step++) {
+        rho_i[0] = rho[step];
+        rho_f[0] = rho[step + 1];
+        mileage_i[0] = mileage[step];
+        mileage_f[0] = mileage[step + 1];
+        p_phi_i[0] = p_phi[step];
+        p_phi_f[0] = p_phi[step + 1];
+        diag_orb_update_fo(&data, &p_f, &p_i);
+    }
+
+    int fails = (data.mrk_pnt[0] != 4);
+    for(int i = 0; i < 4; i++) {
+        if(fabs(data.rho[i] - 1.0) > TOLERANCE
+           || fabs(data.mileage[i] - expected_mileage[i]) > TOLERANCE
+           || fabs(data.p_phi[i] - 2.0) > TOLERANCE
+           || data.pncrdi[i] != expected_direction[i]) {
+            printf(" Full orbit radial crossing %d: rho=%g mileage=%g "
+                   "p_phi=%g direction=%g ---> FAIL\n", i, data.rho[i],
+                   data.mileage[i], data.p_phi[i], data.pncrdi[i]);
+            fails++;
+        }
+    }
+    diag_orb_free(&data);
+    return fails;
+}
+
 int main(int argc, char **argv) {
 
     printf("\n\nTesting diag_orb.c\n\n");
@@ -219,6 +251,7 @@ int main(int argc, char **argv) {
     fails += test_plane_crossings();
 
     fails += test_update_gc();
+    fails += test_update_fo();
 
     printf("\nFinished testing diag_orb.c\n\n");
 
