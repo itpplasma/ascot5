@@ -2193,6 +2193,28 @@ class TestPlotting(unittest.TestCase):
 
         plt.show(block=False)
 
+class TestEnergyEdgeUnits(unittest.TestCase):
+    def test_equivalent_energy_grids(self):
+        from a5py.ascot5io.dist import Dist, DistData
+
+        mass = 2 * unyt.amu
+        momentum = 1e6 * unyt.amu * unyt.m / unyt.s
+        histogram = np.array([[1, 3], [2, 4]]) * unyt.particles
+        dist = DistData(histogram, ppar=np.array([-8, 0, 4]) * momentum,
+                        pperp=np.array([0, 6, 12]) * momentum)
+        edges = np.array([0, 100, 200, 300]) * unyt.keV
+        ev_dist = Dist.ppappe2ekinpitch(dist, mass, ekin_edges=edges.to("eV"))
+        kev_dist = Dist.ppappe2ekinpitch(dist, mass, ekin_edges=edges)
+
+        ev_counts = ev_dist.histogram().to_value("particles")
+        kev_counts = kev_dist.histogram().to_value("particles")
+        np.testing.assert_allclose(ev_counts.sum(axis=1), [3., 0., 7.])
+        np.testing.assert_allclose(kev_counts, ev_counts)
+        np.testing.assert_allclose(
+            kev_dist.distribution().to_value("particles/eV"),
+            ev_dist.distribution().to_value("particles/eV"))
+        self.assertEqual(kev_dist.abscissa_edges("ekin").units, unyt.keV)
+
 class TestExecutableConstants(unittest.TestCase):
     """Python must decode files with the constants of src/consts.h."""
 
