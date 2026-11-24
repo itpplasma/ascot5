@@ -230,9 +230,10 @@ a5err suzuki_sigmav(real* sigmav, real EperAmu, real vnorm, real ne, real te,
                 ind_B = j;
             }
         }
-        if(ind_B < 0 && !err) {
+        if(ind_B < 0) {
             /* Data for the input species not tabulated */
-            err = error_raise( ERR_INPUT_EVALUATION, __LINE__, EF_SUZUKI );
+            *sigmav = 0.0;
+            return err ? err : error_raise(ERR_INPUT_EVALUATION, __LINE__, EF_SUZUKI);
         }
         denominator += znum[ind_Z[i]] * (znum[ind_Z[i]] - 1) * ni[ind_Z[i]];
         numerator += znum[ind_Z[i]] * (znum[ind_Z[i]] - 1) * ni[ind_Z[i]]
