@@ -1610,6 +1610,49 @@ class TestCollisionCoefficients(unittest.TestCase):
             finally:
                 a5.input_free()
 
+    def test_paired_positions_and_speeds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            a5 = Ascot(str(Path(directory) / "input.h5"), create=True)
+            psi = np.tile(np.linspace(0., 1., 5)[:, None], (1, 5))
+            a5.data.create_input("B_2DS", nr=5, nz=5, rmin=4., rmax=8.,
+                zmin=-2., zmax=2., axisr=4., axisz=0., psi0=0., psi1=1.,
+                psi=psi, br=np.zeros_like(psi), bphi=np.full_like(psi, 2.),
+                bz=np.zeros_like(psi), activate=True)
+            density = np.array([1e19, 2e19, 4e19])
+            a5.data.create_input("plasma_1D", nrho=3, nion=1,
+                anum=np.array([1]), znum=np.array([1]), mass=np.array([1.]),
+                charge=np.array([1]), rho=np.array([0., 0.5, 1.]),
+                edensity=density, idensity=density[:, None],
+                etemperature=np.full(3, 1000.), itemperature=np.full(3, 1000.),
+                vtor=np.zeros(3), activate=True)
+            a5.input_init(bfield=True, plasma=True)
+            try:
+                zeros = np.zeros(2)
+                coordinates = (np.array([5., 7.]) * unyt.m, zeros * unyt.rad,
+                               zeros * unyt.m, zeros * unyt.s)
+                speeds = np.array([1e5, 2e6]) * unyt.m / unyt.s
+                args = (1 * unyt.mp, 1 * unyt.e, *coordinates)
+                grid = a5.input_eval_collcoefs(*args, speeds, "nu")
+                self.assertEqual(grid.shape, (2, 2, 2))
+                self.assertFalse(np.allclose(grid[:, 0, 0].v, grid[:, 1, 0].v))
+                self.assertFalse(np.allclose(grid[:, 1, 0].v, grid[:, 1, 1].v))
+                paired = a5.input_eval_collcoefs(*args, speeds, "nu", grid=False)
+                np.testing.assert_allclose(
+                    paired.v, np.diagonal(grid.v, axis1=1, axis2=2))
+
+                shared = a5.input_eval_collcoefs(*args, speeds[0], "nu")
+                self.assertEqual(shared.shape, (2, 2, 1))
+                np.testing.assert_allclose(shared.v[:, :, 0], grid.v[:, :, 0])
+                shared = a5.input_eval_collcoefs(*args, speeds[0], "nu", grid=False)
+                np.testing.assert_allclose(shared.v, grid.v[:, :, 0])
+                empty = a5.input_eval_collcoefs(*args, speeds[:0], "nu")
+                self.assertEqual(empty.shape, (2, 2, 0))
+                with self.assertRaisesRegex(ValueError, "one speed per position"):
+                    a5.input_eval_collcoefs(*args, speeds[[0, 1, 0]],
+                                           "nu", grid=False)
+            finally:
+                a5.input_free()
+
 
 class TestAdaptiveTimeLimit(unittest.TestCase):
     """Adaptive GC steps must end at the requested physical time."""
