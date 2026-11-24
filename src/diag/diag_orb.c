@@ -371,9 +371,8 @@ void diag_orb_update_fo(diag_orb_data* data, particle_simd_fo* p_f,
                 for(int j=0; j < data->nradialplots; j++) {
                     k = diag_orb_check_radial_crossing(p_f->rho[i],p_i->rho[i],
                                                     data->radialdistances[j]);
-                    if(k) {
-                        real d = k;
-                        k = 1-d;
+                    if(k >= 0) {
+                        real d = 1-k;
                         idx = imrk * data->Npnt + ipoint;
                         data->id[idx]     = (real)p_f->id[i];
                         data->mileage[idx]= k*p_f->mileage[i]+ d*p_i->mileage[i];
@@ -578,7 +577,7 @@ void diag_orb_update_gc(diag_orb_data* data, particle_simd_gc* p_f,
                     k = diag_orb_check_radial_crossing(p_f->rho[i],
                                                       p_i->rho[i],
                                                       data->radialdistances[j]);
-                    if(k) {
+                    if(k >= 0) {
                         real d = 1-k;
                         idx = imrk * data->Npnt + ipoint;
                         data->id[idx]     = (real)p_f->id[i];
@@ -764,7 +763,7 @@ void diag_orb_update_ml(diag_orb_data* data, particle_simd_ml* p_f,
                     k = diag_orb_check_radial_crossing(p_f->rho[i],
                                                       p_i->rho[i],
                                                       data->radialdistances[j]);
-                    if(k) {
+                    if(k >= 0) {
                         real d = 1-k;
                         idx = imrk * data->Npnt + ipoint;
                         data->id[idx]     = (real)p_f->id[i];
@@ -835,15 +834,15 @@ real diag_orb_check_plane_crossing(real fang, real iang, real ang0) {
  * This helper function checks whether given rho that defines a Poincare plane
  * is between marker's initial and final rhos (of single timestep).
  *
- * @param frho marker final rho in metres.
- * @param irho marker initial rho in metres.
+ * @param frho marker final normalized radius.
+ * @param irho marker initial normalized radius.
  * @param rho0 Poincare plane rho.
  *
- * @return zero if no-crossing, number k, rho0 = k * (frho - irho), otherwise.
+ * @return -1 if no crossing, otherwise k with rho0 = irho + k * (frho - irho).
  */
 real diag_orb_check_radial_crossing(real frho, real irho, real rho0){
 
-    real k = 0;
+    real k = -1;
     if((frho <= rho0 && irho > rho0) || (irho <= rho0 && frho > rho0)){
         k = fabs((irho - rho0) / (frho - irho));
     }
