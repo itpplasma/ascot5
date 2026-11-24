@@ -1221,10 +1221,14 @@ class RunMixin(DistMixin):
             # Sort data so that when the stacked histogram is plotted, the stack
             # with most markers is at the bottom.
             idx = np.argsort([len(i) for i in xcs])[::-1]
-            xcs = [xcs[i] for i in idx]
             ecs = [endconds[i][1] + " : %.2e" % endconds[i][0] for i in idx]
-            weights = [weights[i] for i in idx]
-            if not weight: weights = None
+
+            # Keep unit-aware dispatch out of Matplotlib's shared bin calculation.
+            xunit = xcs[0].units
+            if isinstance(xbins, unyt.unyt_array):
+                xbins = xbins.to_value(xunit)
+            xcs = [xcs[i].to_value(xunit) for i in idx]
+            weights = [np.asarray(weights[i]) for i in idx] if weight else None
             a5plt.hist1d(x=xcs, xbins=xbins, weights=weights, xlog=xlog,
                          logscale=logscale, xlabel=x, axes=axes, legend=ecs)
 
@@ -1232,10 +1236,15 @@ class RunMixin(DistMixin):
             # 2D plot
             x, xc, xlog = parsearg(x, xmode, endcond)
             y, yc, ylog = parsearg(y, ymode, endcond)
+            if isinstance(xbins, unyt.unyt_array):
+                xbins = xbins.to_value(xc.units)
+            if isinstance(ybins, unyt.unyt_array):
+                ybins = ybins.to_value(yc.units)
             weights = self.getstate("weight", state="ini", endcond=endcond,
                                     ids=ids)
-            if not weight: weights = None
-            a5plt.hist2d(xc, yc, xbins=xbins, ybins=ybins, weights=weights,
+            weights = np.asarray(weights) if weight else None
+            a5plt.hist2d(np.asarray(xc), np.asarray(yc), xbins=xbins,
+                         ybins=ybins, weights=weights,
                          xlog=xlog, ylog=ylog, logscale=logscale, xlabel=x,
                          ylabel=y, axesequal=axesequal, axes=axes, cax=cax)
 
