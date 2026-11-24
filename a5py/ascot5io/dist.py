@@ -1204,9 +1204,8 @@ class Dist(DataContainer):
         ekin_edges : array_like or int, optional
             Energy grid edges or the number of bins in the new distribution.
 
-            If edges are not given explicitly, the maximum energy is calculated
-            from ppar or pperp abscissa (whichever gives the highest) and the
-            minimum is set to zero.
+            If edges are not given explicitly, the range runs from zero to
+            the energy at the momentum grid corner with the largest magnitude.
         pitch_edges : array_like or int, optional
             Pitch grid edges or the number of bins in the new distribution.
 
@@ -1220,9 +1219,9 @@ class Dist(DataContainer):
             one given as input.
         """
         if isinstance(ekin_edges, int):
-            p2max = np.maximum(dist.abscissa_edges("ppar")[-1]**2,
-                               dist.abscissa_edges("ppar")[0]**2,
-                               dist.abscissa_edges("pperp")[-1]**2)
+            ppar_edges = dist.abscissa_edges("ppar")
+            pperp_max = dist.abscissa_edges("pperp")[-1]
+            p2max = max(ppar_edges[0]**2, ppar_edges[-1]**2) + pperp_max**2
             ekinmax = physlib.energy_momentum(mass, np.sqrt(p2max)).to("eV")
             ekin_edges = np.linspace(0*unyt.eV, ekinmax, ekin_edges)
         if isinstance(pitch_edges, int):

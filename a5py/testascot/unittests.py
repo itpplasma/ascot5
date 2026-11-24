@@ -1506,6 +1506,24 @@ class TestAscot(unittest.TestCase):
                                "Converting ppar-pperp to ekin-pitch failed",
                                0.001)
 
+class TestEnergyPitchDistribution(unittest.TestCase):
+    def test_default_energy_range_covers_momentum_grid(self):
+        from a5py.ascot5io.dist import Dist, DistData
+        from a5py.physlib import energy_momentum
+
+        mass = 2 * unyt.amu
+        momentum = 1e6 * unyt.amu * unyt.m / unyt.s
+        histogram = np.array([[1, 3], [2, 4]]) * unyt.particles
+        dist = DistData(histogram, ppar=np.array([-8, 0, 4]) * momentum,
+                        pperp=np.array([0, 6, 12]) * momentum)
+
+        converted = Dist.ppappe2ekinpitch(dist, mass)
+        self.assertAlmostEqual(converted.histogram().sum().to_value("particles"),
+                               histogram.sum().to_value("particles"))
+        corner_energy = energy_momentum(mass, np.hypot(8, 12) * momentum)
+        self.assertAlmostEqual(converted.abscissa_edges("ekin")[-1].to_value("keV"),
+                               corner_energy.to_value("keV"))
+
 class TestPowerDeposition(unittest.TestCase):
     """Energy transfer for the exactly solvable Cartesian thermal bath."""
 
