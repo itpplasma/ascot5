@@ -56,6 +56,43 @@ class TestGuidingCenterTransform(unittest.TestCase):
                 a5.input_free()
 
 
+class TestBBNBI(unittest.TestCase):
+    def test_stateful_random_startup(self):
+        from a5py.ascot5io.nbi import Injector
+        from a5py.ascot5io.plasma import plasma_1D
+
+        executable = Path(__file__).resolve().parents[2] / "build/bbnbi5"
+        if not executable.is_file():
+            self.skipTest("Build bbnbi5 with RANDOM=LCG to test stateful random startup")
+
+        with tempfile.TemporaryDirectory() as directory:
+            filename = Path(directory) / "ascot.h5"
+            inputs = Ascot(str(filename), create=True).data
+            for kind in ("B_TC", "wall_2D", "N0_1D", "asigma_loc", "opt"):
+                inputs.create_input(kind)
+            plasma = plasma_1D.create_dummy()
+            plasma["itemperature"] = plasma["etemperature"]
+            inputs.create_input("plasma_1D", **plasma)
+            injector = Injector(ids=1, anum=1, znum=1, mass=1.0, energy=60000.,
+                                power=1000., efrac=np.array([1., 0., 0.]),
+                                divh=0., divv=0., divhalofrac=0., divhaloh=0.,
+                                divhalov=0., nbeamlet=1, beamletx=np.array([5.]),
+                                beamlety=np.zeros(1), beamletz=np.zeros(1),
+                                beamletdx=np.ones(1), beamletdy=np.zeros(1),
+                                beamletdz=np.zeros(1))
+            inputs.create_input("nbi", ninj=1, injectors=[injector])
+            result = subprocess.run([str(executable), "--n=8"], cwd=directory,
+                                    env=dict(os.environ, OMP_NUM_THREADS="1"),
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            with h5py.File(filename, "r") as file:
+                state = next(iter(file["results"].values()))["state"]
+                np.testing.assert_array_equal(state["errormsg"][:], np.zeros(8))
+                # HDF5 stores the native endcond_ioniz bit.
+                np.testing.assert_array_equal(state["endcond"][:], np.full(8, 0x800))
+                self.assertTrue(np.all(state["weight"][:] > 0))
+
+
 class TestAscot5IO(unittest.TestCase):
     """Class to test `ascot5io` module.
     """

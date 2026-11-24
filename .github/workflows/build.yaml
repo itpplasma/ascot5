@@ -32,11 +32,13 @@ jobs:
       - name: Make libascot.so
         run: make libascot CC=h5pcc
 
-      - name: Make BBNBI
-        run: make bbnbi5 CC=h5pcc
-
       - name: Make ascot2py
         run: make ascot2py.py CC=h5pcc
+
+      - name: Make BBNBI with LCG
+        run: |
+          make -C src clean
+          make bbnbi5 CC=h5pcc RANDOM=LCG -j
 
       - name: Set permissions and pack
         run: |
