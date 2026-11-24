@@ -58,6 +58,11 @@ void bbnbi_simulate(
 
     /* Initialize input data */
     simulate_init(sim);
+    sim->random_data = malloc(sizeof(*sim->random_data));
+    if(!sim->random_data) {
+        print_err("Failed to allocate the BBNBI random number generator.\n");
+        abort();
+    }
     random_init(sim->random_data, time(NULL));
 
     /* Calculate total NBI power so that we can distribute markers along
@@ -111,6 +116,8 @@ void bbnbi_simulate(
     /* Trace neutrals until they are ionized or lost to the wall */
     #pragma omp parallel
     bbnbi_trace_markers(&pq, sim);
+    free(sim->random_data);
+    sim->random_data = NULL;
 }
 
 /**
