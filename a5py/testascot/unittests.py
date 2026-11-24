@@ -407,6 +407,49 @@ class TestAscot5IO(unittest.TestCase):
                          "ABORTED and TLIM")
         self.assertEqual(State.endcond_tostring(endcond[3]), "THERMAL")
 
+    def test_1ds_effective_radius(self):
+        """Evaluate the same potential gradient from native and ASCOT4 data."""
+        with tempfile.TemporaryDirectory() as directory:
+            a5 = Ascot(str(Path(directory)/"radial.h5"), create=True)
+            r_axis = 4.0
+            psi = np.broadcast_to(
+                np.linspace(0, 2, 5)[:, None], (5, 3)).copy()
+            a5.data.create_input(
+                "B_2DS", rmin=r_axis, rmax=r_axis+2, nr=5, zmin=-1,
+                zmax=1, nz=3, axisr=r_axis, axisz=0, psi=psi, psi0=0,
+                psi1=1, br=np.zeros_like(psi), bphi=2*np.ones_like(psi),
+                bz=np.zeros_like(psi), activate=True)
+
+            reff = 2.0
+            rho_grid = np.linspace(0, 1, 3)
+            grad = 100 + 100*rho_grid
+            native = a5.data.create_input(
+                "E_1DS", nrho=3, rhomin=0, rhomax=1, dvdrho=grad,
+                reff=reff)
+            legacy_path = Path(directory)/"input.erad"
+            np.savetxt(legacy_path, np.column_stack((rho_grid, reff*grad)),
+                       header="dV/drho [V]\n3", comments="")
+            legacy = a5.data.create_input(
+                "ascot4_erad", fn=str(legacy_path), reff=reff)
+
+            # The synthetic flux gives rho = sqrt(R - R_axis) in SI units.
+            rho = np.array([0.25, 0.75, 1.25])
+            r = (r_axis + rho**2)*unyt.m
+            expected = np.array([-500, -700/3, 0.0])
+            for label, group in (("ASCOT5", native), ("ASCOT4", legacy)):
+                with self.subTest(input=label):
+                    a5.input_init(bfield=True, efield=group.split("_")[-1])
+                    try:
+                        er, ephi, ez = a5.input_eval(
+                            r, 0*unyt.deg, 0*unyt.m, 0*unyt.s,
+                            "er", "ephi", "ez")
+                        np.testing.assert_allclose(er.to_value("V/m"), expected,
+                                                   rtol=1e-12, atol=1e-12)
+                        np.testing.assert_array_equal(ephi.to_value("V/m"), 0)
+                        np.testing.assert_array_equal(ez.to_value("V/m"), 0)
+                    finally:
+                        a5.input_free()
+
     def test_inputs(self):
         inputs = {
             "bfield"  : ["B_TC", "B_GS", "B_2DS", "B_3DS", "B_STS",],
