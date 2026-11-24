@@ -770,14 +770,17 @@ void libascot_mhd_eval_perturbation(
 /**
  * @brief Evaluate collision coefficients
  *
+ * Output arrays are ordered by species, evaluation point, and speed.
+ * When Nv is -1, the speed dimension has length one.
+ *
  * @param sim_data initialized simulation data struct
  * @param Neval number of evaluation points
  * @param R R coordinates of the evaluation points [m]
  * @param phi phi coordinates of the evaluation points [rad]
  * @param z z coordinates of the evaluation points [m]
  * @param t time coordinates of the evaluation points [s]
- * @param Nv number of velocity grid points
- * @param va test particle velocities at the evaluation point [m/s]
+ * @param Nv number of shared speed grid points, or -1 for one speed per point
+ * @param va test particle speeds [m/s]. Array length is Nv, or Neval if Nv is -1.
  * @param ma test particle mass [kg]
  * @param qa test particle charge [C]
  * @param F output array
@@ -803,6 +806,8 @@ void libascot_eval_collcoefs(
     int n_species  = plasma_get_n_species(&sim->plasma_data);
     const real* qb = plasma_get_species_charge(&sim->plasma_data);
     const real* mb = plasma_get_species_mass(&sim->plasma_data);
+    int pair_speeds = (Nv == -1);
+    int n_speeds = pair_speeds ? 1 : Nv;
 
     #pragma omp parallel for
     for(int k=0; k<Neval; k++) {
@@ -824,20 +829,21 @@ void libascot_eval_collcoefs(
         }
 
         /* Evaluate coefficients for different velocities */
-        for(int iv=0; iv<Nv; iv++) {
+        for(int iv=0; iv<n_speeds; iv++) {
+            real speed = va[pair_speeds ? k : iv];
 
             /* Loop through all plasma species */
             for(int ib=0; ib<n_species; ib++) {
 
                 /* Coulomb logarithm */
                 real clogab[MAX_SPECIES], dclogab[MAX_SPECIES];
-                mccc_coefs_clog(clogab, ma, qa, va[iv], n_species, mb, qb,
+                mccc_coefs_clog(clogab, ma, qa, speed, n_species, mb, qb,
                                 nb, Tb);
-                mccc_coefs_dclog(dclogab, ma, qa, va[iv], n_species, mb, qb, Tb);
+                mccc_coefs_dclog(dclogab, ma, qa, speed, n_species, mb, qb, Tb);
 
                 /* Special functions */
                 real vb = sqrt( 2 * Tb[ib] / mb[ib] );
-                real x  = va[iv] / vb;
+                real x  = speed / vb;
                 mccc_coefs_mufun(mufun, x, &sim->mccc_data);
 
                 /* Coefficients */
@@ -847,11 +853,11 @@ void libascot_eval_collcoefs(
                                             clogab[ib], mufun[0]);
                 real dQb     = mccc_coefs_dQ(ma, qa, mb[ib], qb[ib], nb[ib], vb,
                                              clogab[ib], mufun[2]);
-                real Dparab  = mccc_coefs_Dpara(ma, qa, va[iv], qb[ib], nb[ib],
+                real Dparab  = mccc_coefs_Dpara(ma, qa, speed, qb[ib], nb[ib],
                                                 vb, clogab[ib], mufun[0]);
-                real Dperpb  = mccc_coefs_Dperp(ma, qa, va[iv], qb[ib], nb[ib],
+                real Dperpb  = mccc_coefs_Dperp(ma, qa, speed, qb[ib], nb[ib],
                                                 vb, clogab[ib], mufun[1]);
-                real dDparab = mccc_coefs_dDpara(ma, qa, va[iv], qb[ib], nb[ib],
+                real dDparab = mccc_coefs_dDpara(ma, qa, speed, qb[ib], nb[ib],
                                                  vb, clogab[ib], mufun[0],
                                                  mufun[2]);
                 /* Total derivatives include the speed-dependent logarithm. */
@@ -859,11 +865,11 @@ void libascot_eval_collcoefs(
                 dDparab += Dparab*logderiv;
                 dQb += Qb*logderiv;
                 Fb += Dparab*logderiv;
-                real Kb      = mccc_coefs_K(va[iv], Dparab, dDparab, Qb);
-                real nub     = mccc_coefs_nu(va[iv], Dperpb);
+                real Kb      = mccc_coefs_K(speed, Dparab, dDparab, Qb);
+                real nub     = mccc_coefs_nu(speed, Dperpb);
 
                 /* Store requested quantities */
-                int idx = ib*Nv*Neval + Nv * k + iv;
+                int idx = ib*n_speeds*Neval + n_speeds*k + iv;
                 if(mu0 != NULL)    { mu0[idx]    = mufun[0];   }
                 if(mu1 != NULL)    { mu1[idx]    = mufun[1];   }
                 if(dmu0 != NULL)   { dmu0[idx]   = mufun[2];   }

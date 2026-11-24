@@ -557,8 +557,9 @@ class LibAscot:
             z coordinates where data is evaluated.
         t : array_like, (n,)
             Time coordinates where data is evaluated.
-        va : array_like, (nv,) or (n,)
-            Test particle velocity.
+        va : float or array_like, (nv,) or (n,)
+            Test particle speed. If grid is False, provide one speed per
+            position or a single speed shared by all positions.
         *coefs : str
             Names of the coefficients to be evaluated.
 
@@ -575,10 +576,10 @@ class LibAscot:
             "mu1"    - One of the special functions needed in evaluation.
             "dmu0"   - One of the special functions needed in evaluation.
         grid : bool, optional
-            If True, all velocity components are evaluated at each (R,phi,z)
+            If True, all speeds are evaluated at each (R,phi,z)
             position, i.e., the returned values are of shape (nion+1,n,nv).
 
-            If False, the coefficients are evaluated at positions (R,phi,z,va),
+            If False, each position is evaluated at its corresponding speed,
             e.g. along an orbit, and the returned values have shape (nion+1,n).
 
         Returns
@@ -600,6 +601,10 @@ class LibAscot:
         self._requireinit("bfield", "plasma")
         Neval = r.size
         Nv = va.size if grid else 1
+        pair_speeds = not grid and va.size != 1
+        if pair_speeds and va.size != Neval:
+            raise ValueError(
+                "grid=False requires one speed per position or a shared speed.")
         n_species = self.input_getplasmaspecies()[0]
 
         m = unyt.m; s = unyt.s
@@ -627,7 +632,8 @@ class LibAscot:
                         ctypes.c_double, PTR_REAL, PTR_REAL, PTR_REAL, PTR_REAL,
                         PTR_REAL, PTR_REAL, PTR_REAL, PTR_REAL, PTR_REAL,
                         PTR_REAL, PTR_REAL, PTR_REAL]
-        fun(ctypes.byref(self._sim), Neval, r, phi, z, t, Nv, va, ma, qa,
+        fun(ctypes.byref(self._sim), Neval, r, phi, z, t,
+            -1 if pair_speeds else Nv, va, ma, qa,
             out["f"], out["dpara"], out["dperp"], out["k"], out["nu"], out["q"],
             out["dq"], out["ddpara"], out["clog"], out["mu0"], out["mu1"],
             out["dmu0"])
