@@ -35,6 +35,14 @@ int main(void) {
         printf("20000 keV/amu evaluated without error\n");
         fail = 1;
     }
+    real ni[2] = {4e19, 2e18};
+    int anum[2] = {2, 20}, znum[2] = {1, 10};
+    sigma = 1;
+    if(!suzuki_sigmav(&sigma, 30e3 * CONST_E, 1.0, 6e19, 1500 * CONST_E,
+                     2, ni, anum, znum) || sigma != 0) {
+        printf("Unsupported neon impurity did not return an error and zero rate\n");
+        fail = 1;
+    }
     printf(fail ? "FAIL\n" : "PASS\n");
     return fail;
 }
