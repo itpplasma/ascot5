@@ -664,12 +664,11 @@ class E_1DS(DataGroup):
         rhomax : float
             Maximum rho value.
         dvdrho : array_like (nrho,1)
-            Derivative of electric potential with respect to minor radius [V/m].
-
-            If ``reff = 1 m``, this is essentially equal to ``dv/dr``.
+            Derivative of electric potential with respect to the effective
+            minor radius ``r = reff * rho`` [V/m].
         reff : float
-            Effective minor radius of the plasma used to convert ``dv/drho`` to
-            SI units as ``drho/dr=1/reff`` [m].
+            Effective minor radius [m]. The evaluator multiplies the input by
+            ``reff`` to obtain the derivative with respect to ``rho`` [V].
         desc : str, optional
             Input description.
 

@@ -485,8 +485,8 @@ class Ascot4Templates():
         fn : str, optional
             Filename of the ASCOT4 electric field data.
         reff : float, optional
-            Effective minor radius of the plasma used to convert ``dv/drho`` to
-            SI units as ``drho/dr=1/reff`` [m].
+            Effective minor radius [m] used to convert the ASCOT4 potential
+            derivative from volts per unit ``rho`` to volts per metre.
 
         Returns
         -------
@@ -495,6 +495,11 @@ class Ascot4Templates():
         data : dict
             Input data that can be passed to ``write_hdf5`` method of
             a corresponding type.
+
+        Notes
+        -----
+        Reconvert ASCOT5 input files written by earlier versions of this
+        template with a non-unit ``reff`` to store the gradient in V/m.
         """
         data = {}
         with open(fn, "r") as f:
@@ -506,8 +511,7 @@ class Ascot4Templates():
             rho = h5data[:,0]
             data["rhomin"]  = h5data[0,0]
             data["rhomax"]  = h5data[-1,0]
-            data["dvdrho"] = h5data[:,1]
-            # For data in format dV/rho, we can ignore effective minor radius
+            data["dvdrho"] = h5data[:,1] / reff
 
         # Make sure the input is linearly spaced. If not, interpolate
         tol = 1.0001

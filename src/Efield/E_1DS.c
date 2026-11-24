@@ -35,7 +35,7 @@ int E_1DS_init(E_1DS_data* data, int nrho, real rhomin, real rhomax, real reff,
     for(int i = 0; i < nrho; i++) {
         temp[i] = reff * dvdrho[i];
     }
-    err = interp1Dcomp_setup(&data->dV, dvdrho, nrho, NATURALBC,
+    err = interp1Dcomp_setup(&data->dV, temp, nrho, NATURALBC,
                              rhomin, rhomax);
     free(temp);
     if(err) {
