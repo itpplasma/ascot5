@@ -16,6 +16,12 @@
 #include "step_gceom.h"
 #include "step_gceom_mhd.h"
 
+/* Keep callers without a simulation limit on the original timestep policy. */
+void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
+                     B_field_data* Bdata, E_field_data* Edata, int aldforce) {
+    step_gc_cashkarp_with_limits(p, h, hnext, NULL, tol, Bdata, Edata, aldforce);
+}
+
 /**
  * @brief Integrate a guiding center step for a struct of markers
  *
@@ -28,17 +34,20 @@
  * @param p marker struct that will be updated
  * @param h array containing time step lengths
  * @param hnext suggestion for the next time step. Negative sign indicates current step was rejected
+ * @param final_step whether each requested step reaches the time or mileage
+ *                   limit, or NULL if none does
  * @param tol error tolerance
  * @param Bdata pointer to magnetic field data
  * @param Edata pointer to electric field data
  * @param aldforce indicates whether Abraham-Lorentz-Dirac force is enabled
  */
-void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
-                      B_field_data* Bdata, E_field_data* Edata, int aldforce) {
+void step_gc_cashkarp_with_limits(
+    particle_simd_gc* p, real* h, real* hnext, const int* final_step,
+    real tol, B_field_data* Bdata, E_field_data* Edata, int aldforce) {
 
     int i;
     /* Following loop will be executed simultaneously for all i */
-    GPU_DATA_IS_MAPPED(h[0:p->n_mrk],hnext[0:p->n_mrk])
+    GPU_DATA_IS_MAPPED(h[0:p->n_mrk],hnext[0:p->n_mrk],final_step[0:(final_step ? p->n_mrk : 0)])
     GPU_PARALLEL_LOOP_ALL_LEVELS
     for(i = 0; i < p->n_mrk; i++) {
         if(p->running[i]) {
@@ -195,6 +204,7 @@ void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
              * time-step is accepted, the RK5 solution will be used to advance
              * marker. */
             real rk5[6], rk4[6], delta[6];
+            int accepted = 0;
             if(!errflag) {
                 real err = 0.0;
                 for(int j = 0; j < 6; j++) {
@@ -242,6 +252,7 @@ void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
                 err = err/tol;
                 if(err <= 1){
                     /* Time step accepted */
+                    accepted = 1;
                     hnext[i] = 0.85*h[i]*pow(err,-0.2);
 
                     /* Make sure we don't make a huge jump */
@@ -255,8 +266,9 @@ void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
                 }
             }
 
-            /* Test that results are physical */
-            if(!errflag && fabs(hnext[i]) < A5_EXTREMELY_SMALL_TIMESTEP) {
+            /* An accepted step at a limit will never use its recommendation. */
+            if(!errflag && fabs(hnext[i]) < A5_EXTREMELY_SMALL_TIMESTEP
+               && !(accepted && final_step && final_step[i])) {
                 errflag = error_raise(
                     ERR_INVALID_TIMESTEP, __LINE__, EF_STEP_GC_CASHKARP);
             }

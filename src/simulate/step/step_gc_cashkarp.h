@@ -12,7 +12,10 @@
 #include "../../particle.h"
 
 void step_gc_cashkarp(particle_simd_gc* p, real* h, real* hnext, real tol,
-                      B_field_data* Bdata, E_field_data* Edata, int aldforce);
+                     B_field_data* Bdata, E_field_data* Edata, int aldforce);
+void step_gc_cashkarp_with_limits(
+    particle_simd_gc* p, real* h, real* hnext, const int* final_step,
+    real tol, B_field_data* Bdata, E_field_data* Edata, int aldforce);
 void step_gc_cashkarp_mhd(
     particle_simd_gc* p, real* h, real* hnext, real tol, B_field_data* Bdata,
     E_field_data* Edata, boozer_data* boozer, mhd_data* mhd, int aldforce);
