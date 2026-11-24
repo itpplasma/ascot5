@@ -29,10 +29,8 @@
 #include "asigma/asigma_loc.h"
 #include "consts.h"
 
-#pragma omp declare target
 /** Set values outside abscissae to zero instead of raising an error. */
 static int ASIGMA_EXTRAPOLATE = 0;
-#pragma omp end declare target
 
 /**
  * @brief Toggle extrapolation when evaluating cross sections.

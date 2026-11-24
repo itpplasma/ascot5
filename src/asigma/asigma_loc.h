@@ -32,7 +32,6 @@ int asigma_loc_init(asigma_loc_data* data, int nreac,
                     int* nT, real* Tmin, real* Tmax, real* sigma);
 void asigma_loc_free(asigma_loc_data* data);
 void asigma_loc_offload(asigma_loc_data* data);
-#pragma omp declare target
 DECLARE_TARGET_SIMD_UNIFORM(asigma_data, reac_type, z_2, a_2,\
     extrapolate)
 a5err asigma_loc_eval_sigma(
@@ -54,6 +53,5 @@ a5err asigma_loc_eval_bms(
     real* sigmav, int z_1, int a_1, real E, real mass, int nion,
     const int* znum, const int* anum, real T_e, real* n_i, int extrapolate,
     asigma_loc_data* asigma_data);
-#pragma omp end declare target
 
 #endif
