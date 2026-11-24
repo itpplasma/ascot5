@@ -26,5 +26,6 @@ GPU_DECLARE_TARGET_SIMD
 void gctransform_pparmuzeta2prpphipz(real mass, real charge, real* B_dB,
                                      real phi, real ppar, real mu, real zeta,
                                      real* pr, real* pphi, real* pz);
+GPU_DECLARE_TARGET_SIMD_END
 
 #endif
