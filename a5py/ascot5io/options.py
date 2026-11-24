@@ -934,7 +934,7 @@ class Opt(DataGroup):
                     except Exception:
                         out[key] = val
                 else:
-                    out[key] = type(defopt[key])(val)
+                    out[key] = type(defopt[key])(val.item())
 
         for o in defopt.keys():
             if o not in out:

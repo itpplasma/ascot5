@@ -1858,7 +1858,7 @@ class TestMoments(unittest.TestCase):
         dEele_d = p * dt * k[0,:]
         dEion_d = p * dt * np.sum(k[1:,:], axis=0)
         dpsi    = np.zeros(psi.shape) * psi.units
-        dpsi[0] = psi[0] - psii
+        dpsi[0] = psi[0] - psii[0]
         dpsi[1:] = psi[1:] - psi[:-1]
         nu      = np.sum(nu, axis=0)
         k       = np.sum(k, axis=0)

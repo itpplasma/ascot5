@@ -45,7 +45,7 @@ class wall_2D(DataGroup):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key == "nelements":
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
             if path+'/flag' in f:
                 flagAttrs = ['flagIdStrings','flagIdList']
@@ -316,7 +316,7 @@ class wall_3D(DataGroup):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key == "nelements":
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
             if "flagIdStrings" in f[path+"/flag"].attrs:
                 flagnames = f[path+"/flag"].attrs.get("flagIdStrings")
@@ -618,7 +618,7 @@ class wall_3D(DataGroup):
             while type(nelements) == list:
                 nelements = nelements[0]
         elif type(nelements) == np.ndarray:
-            nelements = int(nelements)
+            nelements = int(nelements.item())
         else:
             raise ValueError("Unsupported format for nelements.")
 

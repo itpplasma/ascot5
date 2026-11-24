@@ -645,7 +645,7 @@ class E_1DS(DataGroup):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key == "nrho":
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         return out
 

@@ -330,8 +330,9 @@ class LibProviders():
         """Initialize :class:`E_1DS` from dictionary.
         """
         _LIBASCOT.E_1DS_init(
-            ctypes.byref(self._sim.E_data.E1DS), int(kwargs["nrho"]),
-            kwargs["rhomin"][0,0], kwargs["rhomax"][0,0], kwargs["reff"][0],
+            ctypes.byref(self._sim.E_data.E1DS), int(kwargs["nrho"].item()),
+            kwargs["rhomin"].item(), kwargs["rhomax"].item(),
+            kwargs["reff"].item(),
             kwargs["dvdrho"].flatten().ctypes.data_as(PTR_ARR))
         self._sim.E_data.type = ascot2py.E_field_type_1DS
 
@@ -365,8 +366,9 @@ class LibProviders():
         anum = np.ascontiguousarray(kwargs["anum"], dtype=np.int32)
         znum = np.ascontiguousarray(kwargs["znum"], dtype=np.int32)
         _LIBASCOT.plasma_1D_init(
-            ctypes.byref(self._sim.plasma_data.plasma_1D), int(kwargs["nrho"]),
-            int(kwargs["nion"]), kwargs["rho"].ctypes.data_as(PTR_ARR),
+            ctypes.byref(self._sim.plasma_data.plasma_1D),
+            int(kwargs["nrho"].item()), int(kwargs["nion"].item()),
+            kwargs["rho"].ctypes.data_as(PTR_ARR),
             anum.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
             znum.ctypes.data_as(ctypes.POINTER(ctypes.c_int32)),
             mass.ctypes.data_as(PTR_ARR), charge.ctypes.data_as(PTR_ARR),
@@ -391,8 +393,9 @@ class LibProviders():
              (kwargs["charge"].flatten() * unyt.elementary_charge).to("C")
             )
         _LIBASCOT.plasma_1DS_init(
-            ctypes.byref(self._sim.plasma_data.plasma_1DS), int(kwargs["nrho"]),
-            kwargs["rhomin"][0,0], kwargs["rhomax"][0,0], int(kwargs["nion"]),
+            ctypes.byref(self._sim.plasma_data.plasma_1DS),
+            int(kwargs["nrho"].item()), kwargs["rhomin"][0,0],
+            kwargs["rhomax"][0,0], int(kwargs["nion"].item()),
             kwargs["anum"].ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
             kwargs["znum"].ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
             mass.ctypes.data_as(PTR_ARR), charge.ctypes.data_as(PTR_ARR),
@@ -418,7 +421,8 @@ class LibProviders():
             )
         _LIBASCOT.plasma_1Dt_init(
             ctypes.byref(self._sim.plasma_data.plasma_1Dt),
-            int(kwargs["nrho"]), int(kwargs["ntime"]), int(kwargs["nion"]),
+            int(kwargs["nrho"].item()), int(kwargs["ntime"].item()),
+            int(kwargs["nion"].item()),
             kwargs["rho"].ctypes.data_as(PTR_ARR),
             kwargs["time"].ctypes.data_as(PTR_ARR),
             kwargs["anum"].ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
@@ -536,7 +540,7 @@ class LibProviders():
     def _provide_Boozer(self, **kwargs):
         """Initialize :class:`Boozer` from dictionary.
         """
-        nthetag = int(kwargs["nthetag"])
+        nthetag = int(kwargs["nthetag"].item())
         padding = 4
         data = np.copy(kwargs["theta_psithetageom"])
         theta_psithetageom = np.concatenate(
@@ -546,11 +550,12 @@ class LibProviders():
              theta_psithetageom) )
         nthetag += padding*2
         _LIBASCOT.boozer_init(
-            ctypes.byref(self._sim.boozer_data), int(kwargs["npsi"]),
+            ctypes.byref(self._sim.boozer_data), int(kwargs["npsi"].item()),
             kwargs["psimin"][0], kwargs["psimax"][0],
-            int(kwargs["ntheta"]), nthetag,
+            int(kwargs["ntheta"].item()), nthetag,
             kwargs["nu_psitheta"].ctypes.data_as(PTR_ARR),
-            theta_psithetageom.ctypes.data_as(PTR_ARR), int(kwargs["nrzs"]),
+            theta_psithetageom.ctypes.data_as(PTR_ARR),
+            int(kwargs["nrzs"].item()),
             kwargs["rs"].ctypes.data_as(PTR_ARR),
             kwargs["zs"].ctypes.data_as(PTR_ARR)
             )
@@ -624,7 +629,7 @@ class LibProviders():
         """
         _LIBASCOT.asigma_loc_init(
             ctypes.byref(self._sim.asigma_data.asigma_loc),
-            int(kwargs["nreac"]),
+            int(kwargs["nreac"].item()),
             kwargs["z1"].ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
             kwargs["a1"].ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
             kwargs["z2"].ctypes.data_as(ctypes.POINTER(ctypes.c_int)),

@@ -53,7 +53,7 @@ class Marker(DataGroup):
             rng  = np.random.default_rng()
             pick = rng.choice(mrk["ids"].ravel(), size=(pick,), replace=False)
 
-        idx = np.where(np.in1d(mrk["ids"], pick))
+        idx = np.where(np.isin(np.ravel(mrk["ids"]), pick))
         for k in mrk:
             if k == "n": continue
             mrk[k] = mrk[k][idx]
@@ -301,7 +301,7 @@ class FL(Marker):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key == "n":
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         out["ids"] = out["id"]
         del out["id"]
@@ -426,7 +426,7 @@ class GC(Marker):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key == "n":
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         out["ids"] = out["id"]
         del out["id"]
@@ -579,7 +579,7 @@ class Prt(Marker):
             for key in f[path]:
                 out[key] = f[path][key][:]
                 if key == "n":
-                    out[key] = int(out[key])
+                    out[key] = int(out[key].item())
 
         out["ids"] = out["id"]
         del out["id"]

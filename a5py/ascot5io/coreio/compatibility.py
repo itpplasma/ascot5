@@ -50,7 +50,7 @@ def _convert5to6(fn):
                 g = h5["wall"][wall]
                 if not "flag" in g:
                     print("Adding flags to %s" % wall)
-                    nelements = int(g["nelements"][:])
+                    nelements = int(g["nelements"][:].item())
                     flag = np.zeros(shape=(nelements,1), dtype=int)
                     g.create_dataset("flag", (nelements,1), data=flag,
                                      dtype="i4")
@@ -59,7 +59,7 @@ def _convert5to6(fn):
                 g = h5["plasma"][plasma]
                 if not "vtor" in g:
                     print("Adding vtor to %s" % plasma)
-                    nrho = int(g["nrho"][:])
+                    nrho = int(g["nrho"][:].item())
                     vtor = np.zeros(shape=(nrho,1), dtype=float)
                     g.create_dataset("vtor", (nrho,1), data=vtor,
                                      dtype="f8")
@@ -67,7 +67,7 @@ def _convert5to6(fn):
                 g = h5["plasma"][plasma]
                 if not "vtor" in g:
                     print("Adding vtor to %s" % plasma)
-                    nrho = int(g["nrho"][:])
+                    nrho = int(g["nrho"][:].item())
                     vtor = np.zeros(shape=(nrho,1), dtype=float)
                     g.create_dataset("vtor", (nrho,1), data=vtor,
                                      dtype="f8")
@@ -75,7 +75,8 @@ def _convert5to6(fn):
                 g = h5["plasma"][plasma]
                 if not "vtor" in g:
                     print("Adding vtor to %s" % plasma)
-                    nrho, ntime = int(g["nrho"][:]), int(g["ntime"][:])
+                    nrho = int(g["nrho"][:].item())
+                    ntime = int(g["ntime"][:].item())
                     vtor = np.zeros(shape=(nrho,ntime), dtype=float)
                     g.create_dataset("vtor", (nrho,ntime), data=vtor,
                                      dtype="f8")
@@ -258,7 +259,7 @@ def _convert2to3(fn):
                 g = h5["wall"][wall]
                 if not "flag" in g:
                     print("Adding flag to %s" % wall)
-                    nelements = int(g["nelements"][:])
+                    nelements = int(g["nelements"][:].item())
                     flag = np.zeros(shape=(nelements,1), dtype=int)
                     g.create_dataset("flag", (nelements,1), data=flag,
                                      dtype="i4")

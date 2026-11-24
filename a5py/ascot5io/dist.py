@@ -541,7 +541,7 @@ class Dist(DataContainer):
         with self as f:
             histogram = np.sum(f["ordinate"][:], axis=0) * unyt.particles
             abscissa_edges = {}
-            for i in range(int(f["abscissa_ndim"][:])):
+            for i in range(int(f["abscissa_ndim"][:].item())):
                 abscissa = f["abscissa_vec_0"+str(i+1)]
                 name     = abscissa.attrs["name_0"+str(i)].decode("utf-8")
                 unit     = abscissa.attrs["unit_0"+str(i)].decode("utf-8")
@@ -1348,7 +1348,7 @@ class Dist_5D(Dist):
                 return np.linspace(0.5*(edges[0]+edges[1]),
                                    0.5*(edges[-2]+edges[-1]), num=edges.size-1)
 
-            abscissae = [0] * int(f["abscissa_ndim"][:])
+            abscissae = [0] * int(f["abscissa_ndim"][:].item())
             for i in range(0, len(abscissae)):
                 abscissa     = f["abscissa_vec_0"+str(i+1)]
                 name         = abscissa.attrs["name_0"+str(i)].decode("utf-8")
@@ -1386,7 +1386,7 @@ class Dist_COM(Dist):
                 return np.linspace(0.5*(edges[0]+edges[1]),
                                    0.5*(edges[-2]+edges[-1]), num=edges.size-1)
 
-            abscissae = [0] * int(f["abscissa_ndim"][:])
+            abscissae = [0] * int(f["abscissa_ndim"][:].item())
             for i in range(0, len(abscissae)):
                 abscissa     = f["abscissa_vec_0"+str(i+1)]
                 name         = abscissa.attrs["name_0"+str(i)].decode("utf-8")
